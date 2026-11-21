@@ -15,86 +15,47 @@ SYSLOG = "/var/log/syslog"
 
 
 def _check_log_attr(log_path, check_id, remediation_id, log_name):
-    """Check append-only attribute on a log file."""
+    """Check log file existence and recommend remote shipping."""
     try:
         if not os.path.exists(log_path):
-            return skipped_check(
+            return make_check(
                 check_id, CATEGORY,
-                f"{log_name} append-only protection (lsattr / chattr +a)",
-                "Verifies whether the append-only attribute is set on the log file.",
-                "Without append-only protection, a compromised process or root user can truncate or delete the log, destroying forensic evidence.",
-                f"lsattr {log_path}",
-                "File does not exist (journald-only system).",
-                remediation_id=remediation_id,
+                f"{log_name} protection",
+                STATUS_INFO,
+                "Checks whether the log file exists and recommends remote log shipping.",
+                "Without remote log shipping, a compromised root user can delete or truncate local logs, destroying forensic evidence.",
+                f"test -f {log_path}",
+                current_value=f"{log_name} not found (journald-only or rotated away)",
+                recommended_value="Consider remote log shipping (rsyslog/journald forwarding) or auditd for tamper-proof logging.",
+                details=[f"{log_name} does not exist. Consider forwarding logs to a remote server for tamper-proof storage."],
+                remediation_id=None,
+                manual_command="",
             )
-
-        rc, out, err = run_cmd(["lsattr", log_path])
-        if rc != 0:
-            return skipped_check(
-                check_id, CATEGORY,
-                f"{log_name} append-only protection (lsattr / chattr +a)",
-                "Verifies whether the append-only attribute is set on the log file.",
-                "Without append-only protection, a compromised process or root user can truncate or delete the log, destroying forensic evidence.",
-                f"lsattr {log_path}",
-                f"lsattr failed: {err.strip()}",
-                remediation_id=remediation_id,
-            )
-
-        # lsattr output: "----a------e-- /var/log/auth.log"
-        attrs = out.strip().split()
-        if not attrs:
-            return skipped_check(
-                check_id, CATEGORY,
-                f"{log_name} append-only protection (lsattr / chattr +a)",
-                "Verifies whether the append-only attribute is set on the log file.",
-                "Without append-only protection, a compromised process or root user can truncate or delete the log, destroying forensic evidence.",
-                f"lsattr {log_path}",
-                "Empty lsattr output.",
-                remediation_id=remediation_id,
-            )
-
-        attr_str = attrs[0]
-        # 'a' flag means append-only
-        has_append_only = "a" in attr_str
-
-        if has_append_only:
-            status = STATUS_PASS
-            current_value = "Append-only attribute is set"
-            recommended_value = "Append-only attribute set (chattr +a)"
-            details = ["Log file is protected from truncation and deletion."]
-            manual_command = ""
-        else:
-            status = STATUS_WARNING
-            current_value = "Append-only attribute is NOT set"
-            recommended_value = "Append-only attribute set (chattr +a)"
-            details = ["Log file can be truncated or deleted by root or a compromised process."]
-            manual_command = f"sudo chattr +a {log_path}"
 
         return make_check(
             check_id, CATEGORY,
-            f"{log_name} append-only protection (lsattr / chattr +a)",
-            status,
-            "Checks whether the append-only file attribute is enabled on the log file using lsattr. "
-            "When set, the file can only be opened in append mode and cannot be truncated or deleted, "
-            "even by a root-level attacker.",
-            "Without append-only protection, an attacker with root access can wipe or forge the log file, "
-            "hiding their intrusion and destroying forensic evidence. This is a critical defense-in-depth measure.",
-            f"lsattr {log_path}",
-            current_value=current_value,
-            recommended_value=recommended_value,
-            details=details,
-            remediation_id=remediation_id,
-            manual_command=manual_command,
+            f"{log_name} protection",
+            STATUS_INFO,
+            "Checks whether the log file exists and recommends remote log shipping.",
+            "Without remote log shipping, a compromised root user can delete or truncate local logs, destroying forensic evidence.",
+            f"test -f {log_path}",
+            current_value=f"{log_name} exists",
+            recommended_value="Consider remote log shipping (rsyslog/journald forwarding) or auditd for tamper-proof logging.",
+            details=[f"{log_name} exists. Consider forwarding logs to a remote server for tamper-proof storage."],
+            remediation_id=None,
+            manual_command="",
         )
     except Exception as e:
+        import logging
+        logging.getLogger("securitywizard").exception("Error checking %s", log_path)
         return skipped_check(
             check_id, CATEGORY,
-            f"{log_name} append-only protection (lsattr / chattr +a)",
-            "Verifies whether the append-only attribute is set on the log file.",
-            "Without append-only protection, a compromised process or root user can truncate or delete the log, destroying forensic evidence.",
-            f"lsattr {log_path}",
+            f"{log_name} protection",
+            "Checks whether the log file exists and recommends remote log shipping.",
+            "Without remote log shipping, a compromised root user can delete or truncate local logs, destroying forensic evidence.",
+            f"test -f {log_path}",
             f"Unexpected error: {e}",
-            remediation_id=remediation_id,
+            remediation_id=None,
         )
 
 
@@ -330,11 +291,11 @@ def run_checks() -> list:
     """Run all log checks and return a list of check result dicts."""
     checks = []
 
-    # LOG-001: auth.log append-only
-    checks.append(_check_log_attr(AUTH_LOG, "LOG-001", "log_append_only_auth", "/var/log/auth.log"))
+    # LOG-001: auth.log protection
+    checks.append(_check_log_attr(AUTH_LOG, "LOG-001", None, "/var/log/auth.log"))
 
-    # LOG-002: syslog append-only
-    checks.append(_check_log_attr(SYSLOG, "LOG-002", "log_append_only_syslog", "/var/log/syslog"))
+    # LOG-002: syslog protection
+    checks.append(_check_log_attr(SYSLOG, "LOG-002", None, "/var/log/syslog"))
 
     # LOG-003: brute-force telemetry
     checks.append(_check_brute_force())

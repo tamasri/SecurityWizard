@@ -222,64 +222,6 @@ def _build_fix_perm_sshd_config() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Log append-only
-# ---------------------------------------------------------------------------
-
-def _build_log_append_only_auth() -> dict:
-    try:
-        path = "/var/log/auth.log"
-        if not _file_exists(path):
-            return {
-                "file_changes": [],
-                "perm_changes": [],
-                "validate_commands": [],
-                "commands": [],
-                "inverse_commands": [],
-                "warnings": [],
-                "blockers": [f"{path} does not exist"],
-            }
-        return {
-            "file_changes": [],
-            "perm_changes": [],
-            "validate_commands": [],
-            "commands": [["chattr", "+a", path]],
-            "inverse_commands": [["chattr", "-a", path]],
-            "warnings": ["logrotate cannot rotate an append-only file until `chattr -a` is run"],
-            "blockers": [],
-        }
-    except Exception:
-        return {"file_changes": [], "perm_changes": [], "validate_commands": [], "commands": [],
-                "inverse_commands": [], "warnings": [], "blockers": ["Unexpected error"]}
-
-
-def _build_log_append_only_syslog() -> dict:
-    try:
-        path = "/var/log/syslog"
-        if not _file_exists(path):
-            return {
-                "file_changes": [],
-                "perm_changes": [],
-                "validate_commands": [],
-                "commands": [],
-                "inverse_commands": [],
-                "warnings": [],
-                "blockers": [f"{path} does not exist"],
-            }
-        return {
-            "file_changes": [],
-            "perm_changes": [],
-            "validate_commands": [],
-            "commands": [["chattr", "+a", path]],
-            "inverse_commands": [["chattr", "-a", path]],
-            "warnings": ["logrotate cannot rotate an append-only file until `chattr -a` is run"],
-            "blockers": [],
-        }
-    except Exception:
-        return {"file_changes": [], "perm_changes": [], "validate_commands": [], "commands": [],
-                "inverse_commands": [], "warnings": [], "blockers": ["Unexpected error"]}
-
-
-# ---------------------------------------------------------------------------
 # ACTIONS registry
 # ---------------------------------------------------------------------------
 
@@ -333,23 +275,5 @@ ACTIONS: dict[str, dict] = {
             "SSH daemon settings. Safe because it removes all group and world access."
         ),
         "build_plan": _build_fix_perm_sshd_config,
-    },
-    "log_append_only_auth": {
-        "title": "Make /var/log/auth.log append-only",
-        "description": (
-            "Runs chattr +a on /var/log/auth.log so entries can only be appended, not modified "
-            "or deleted. Safe because it does not change log content, only the filesystem attribute. "
-            "Note: logrotate cannot rotate an append-only file until `chattr -a` is run."
-        ),
-        "build_plan": _build_log_append_only_auth,
-    },
-    "log_append_only_syslog": {
-        "title": "Make /var/log/syslog append-only",
-        "description": (
-            "Runs chattr +a on /var/log/syslog so entries can only be appended, not modified "
-            "or deleted. Safe because it does not change log content, only the filesystem attribute. "
-            "Note: logrotate cannot rotate an append-only file until `chattr -a` is run."
-        ),
-        "build_plan": _build_log_append_only_syslog,
     },
 }
