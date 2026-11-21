@@ -22,6 +22,13 @@ def _make_fake_module(monkeypatch, name, results, delay=0.0, crash=False):
 def _isolate_scanner(monkeypatch, modules):
     """Replace scanner.MODULES with only the given modules to isolate the scan."""
     monkeypatch.setattr(scanner, "MODULES", modules)
+    # Also patch importlib.import_module to only return fake modules for the ones we registered
+    original_import = __import__("importlib").import_module
+    def fake_import_module(name):
+        if name in [m[1] for m in modules]:
+            return original_import(name)
+        raise ImportError("Module not registered: " + name)
+    monkeypatch.setattr(scanner, "importlib", type("FakeImportlib", (), {"import_module": fake_import_module}))
 
 
 def test_concurrent_execution_is_faster_than_sequential(monkeypatch):

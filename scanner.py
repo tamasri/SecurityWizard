@@ -22,6 +22,7 @@ MODULES = [
     ("logs", "checks_logs"),
     ("misc", "checks_misc"),
     ("access", "checks_access"),
+    ("system", "checks_system"),
 ]
 
 
