@@ -13,6 +13,7 @@ import uvicorn
 
 import scanner
 import remediator
+import auth
 
 app = FastAPI(title="SecurityWizard", version="1.0.0")
 
@@ -39,16 +40,36 @@ jobs_lock = threading.Lock()
 async def security_middleware(request: Request, call_next):
     # Check Host header
     host = request.headers.get("host", "")
-    if host:
-        host_part = host.split(":")[0]
-        if host_part not in ("127.0.0.1", "localhost"):
-            return JSONResponse(status_code=403, content={"detail": "Forbidden Host"})
+    if host and not auth.check_host_allowed(host):
+        return JSONResponse(status_code=403, content={"detail": "Forbidden Host"})
     
     # Check X-Requested-With for POST requests
     if request.method == "POST":
         xrw = request.headers.get("x-requested-with", "")
         if xrw != "SecurityWizard":
             return JSONResponse(status_code=403, content={"detail": "Forbidden Origin"})
+    
+    # Auth check for /api/* and /
+    if auth.is_auth_enabled():
+        path = request.url.path
+        if path.startswith("/api/") or path == "/":
+            cookie_token = request.cookies.get("sw_session", "")
+            if cookie_token:
+                username = auth._verify_session_token(cookie_token)
+                if username:
+                    return await call_next(request)
+            
+            if path == "/api/login" or path == "/api/logout":
+                return await call_next(request)
+            
+            if auth.get_auth_mode() == "token" and auth.get_generated_token():
+                auth_header = request.headers.get("authorization", "")
+                if auth_header.startswith("Bearer "):
+                    token = auth_header[7:]
+                    if token == auth.get_generated_token():
+                        return await call_next(request)
+            
+            return JSONResponse(status_code=401, content={"detail": "Authentication required"})
     
     return await call_next(request)
 
@@ -57,6 +78,35 @@ async def security_middleware(request: Request, call_next):
 async def index():
     template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
     return FileResponse(template_path)
+
+@app.post("/api/login")
+async def login(request: Request):
+    body = await request.json()
+    password = body.get("password", "")
+    if auth.get_auth_mode() == "password":
+        if auth.verify_password(password, auth.get_password_hash()):
+            token = auth._create_session_token("user")
+            response = JSONResponse(content={"token": token})
+            response.set_cookie("sw_session", token, httponly=True, samesite="strict", secure=False)
+            return response
+        return JSONResponse(status_code=401, content={"detail": "Invalid password"})
+    elif auth.get_auth_mode() == "token":
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            if token == auth.get_generated_token():
+                session_token = auth._create_session_token("token-user")
+                response = JSONResponse(content={"token": session_token})
+                response.set_cookie("sw_session", session_token, httponly=True, samesite="strict", secure=False)
+                return response
+        return JSONResponse(status_code=401, content={"detail": "Invalid token"})
+    return JSONResponse(status_code=400, content={"detail": "Auth not configured"})
+
+@app.post("/api/logout")
+async def logout():
+    response = JSONResponse(content={"ok": True})
+    response.delete_cookie("sw_session")
+    return response
 
 @app.get("/api/health")
 async def health():
@@ -139,4 +189,8 @@ async def rollback(req: RollbackRequest):
     return result
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("SECURITYWIZARD_PORT", "8443")))
+    bind = os.environ.get("SECURITYWIZARD_BIND", "127.0.0.1")
+    auth.init(bind)
+    if auth.is_auth_enabled() and auth.get_generated_token():
+        print(f"SecurityWizard auth token: {auth.get_generated_token()}")
+    uvicorn.run(app, host=bind, port=int(os.environ.get("SECURITYWIZARD_PORT", "8443")))
