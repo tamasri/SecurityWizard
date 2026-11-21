@@ -350,7 +350,7 @@ async def remediate(request: Request, req: RemediateRequest):
     return result
 
 
-DEADMAN_TOKEN_RE = re.compile(r"^DM-[A-Z]{3}-\d{3}$")
+DEADMAN_TOKEN_RE = re.compile(r"^DM-[a-z][a-z0-9_]{2,63}$")
 
 
 @app.get("/api/deadman")

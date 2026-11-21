@@ -32,7 +32,7 @@ def _fake_scan(progress_cb=None):
     if progress_cb:
         progress_cb(1, 1, "network")
     return {
-        "checks": [{"id": "NET-001", "status": "PASS"}],
+        "checks": [{"id": "ufw_baseline", "status": "PASS"}],
         "score": 100,
         "counts": {},
         "started": "x",
@@ -94,19 +94,19 @@ def test_failed_scan_is_reported(client, monkeypatch):
 
 def test_dry_run_works_and_is_audited(client, monkeypatch):
     monkeypatch.setattr(remediator, "preview", lambda rid: {"remediation_id": rid, "ok": True})
-    resp = client.post("/api/dry-run", json={"remediation_id": "NET-001"}, headers=CSRF)
+    resp = client.post("/api/dry-run", json={"remediation_id": "ufw_baseline"}, headers=CSRF)
     assert resp.status_code == 200
-    assert resp.json()["remediation_id"] == "NET-001"
+    assert resp.json()["remediation_id"] == "ufw_baseline"
 
 
 def test_remediate_validates_id_and_honours_readonly(client, monkeypatch):
     monkeypatch.setattr(remediator, "apply", lambda rid, confirm: {"applied": rid, "confirm": confirm})
-    bad = client.post("/api/remediate", json={"remediation_id": "nope", "confirm": True}, headers=CSRF)
+    bad = client.post("/api/remediate", json={"remediation_id": "Not Valid!", "confirm": True}, headers=CSRF)
     assert bad.status_code == 422
-    good = client.post("/api/remediate", json={"remediation_id": "NET-001", "confirm": True}, headers=CSRF)
-    assert good.status_code == 200 and good.json()["applied"] == "NET-001"
+    good = client.post("/api/remediate", json={"remediation_id": "ufw_baseline", "confirm": True}, headers=CSRF)
+    assert good.status_code == 200 and good.json()["applied"] == "ufw_baseline"
     monkeypatch.setenv("SECURITYWIZARD_READONLY", "1")
-    blocked = client.post("/api/remediate", json={"remediation_id": "NET-001", "confirm": True}, headers=CSRF)
+    blocked = client.post("/api/remediate", json={"remediation_id": "ufw_baseline", "confirm": True}, headers=CSRF)
     assert blocked.status_code == 403
 
 
@@ -118,7 +118,7 @@ def test_rollback_validates_id(client, monkeypatch):
 
 
 def test_post_requires_csrf_header_and_known_host(client):
-    assert client.post("/api/dry-run", json={"remediation_id": "NET-001"}).status_code == 403
+    assert client.post("/api/dry-run", json={"remediation_id": "ufw_baseline"}).status_code == 403
     assert client.get("/api/status", headers={"Host": "evil.example"}).status_code == 403
 
 
@@ -132,6 +132,6 @@ def test_deadman_confirm_endpoint(client, monkeypatch):
     calls = []
     monkeypatch.setattr(main.deadman, "confirm", lambda token, bdir: calls.append(token) or True)
     assert client.post("/api/deadman/confirm", json={"token": "bad"}, headers=CSRF).status_code == 422
-    ok = client.post("/api/deadman/confirm", json={"token": "DM-SSH-001"}, headers=CSRF)
-    assert ok.status_code == 200 and ok.json() == {"ok": True} and calls == ["DM-SSH-001"]
+    ok = client.post("/api/deadman/confirm", json={"token": "DM-ssh_permit_root_login"}, headers=CSRF)
+    assert ok.status_code == 200 and ok.json() == {"ok": True} and calls == ["DM-ssh_permit_root_login"]
     assert client.get("/api/deadman").status_code == 200

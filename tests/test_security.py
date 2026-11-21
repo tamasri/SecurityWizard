@@ -29,12 +29,12 @@ def setup_security(monkeypatch, tmp_path):
 
 def test_validate_remediation_id():
     """Test remediation ID validation."""
-    assert security.validate_remediation_id("NET-001") is True
-    assert security.validate_remediation_id("SSH-042") is True
-    assert security.validate_remediation_id("net-001") is False
-    assert security.validate_remediation_id("NET-1") is False
-    assert security.validate_remediation_id("NET-0001") is False
-    assert security.validate_remediation_id("NET001") is False
+    assert security.validate_remediation_id("ssh_permit_root_login") is True
+    assert security.validate_remediation_id("ufw_baseline") is True
+    assert security.validate_remediation_id("NET-001") is False
+    assert security.validate_remediation_id("x") is False
+    assert security.validate_remediation_id("../etc/passwd") is False
+    assert security.validate_remediation_id("ssh permit") is False
     assert security.validate_remediation_id("") is False
 
 

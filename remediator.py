@@ -2,7 +2,6 @@ import difflib
 import json
 import logging
 import os
-import re
 import shlex
 import shutil
 import stat
@@ -34,11 +33,10 @@ for _mod in ("actions_network", "actions_ssh", "actions_system"):
     except ImportError:
         pass
 
-_REMEDIATION_ID_RE = re.compile(r"^[A-Z]{3}-\d{3}$")
-
 
 def _validate_remediation_id(rid: str) -> bool:
-    return bool(_REMEDIATION_ID_RE.match(rid)) and rid in ACTIONS
+    """The registry of actions is the allowlist: only a registered id can ever be previewed or applied."""
+    return isinstance(rid, str) and rid in ACTIONS
 
 
 _lock = threading.Lock()

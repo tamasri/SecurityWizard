@@ -9,8 +9,9 @@ from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger("securitywizard")
 
-# Regex for remediation IDs (e.g., NET-001)
-REMEDIATION_ID_RE = re.compile(r"^[A-Z]{3}-\d{3}$")
+# Remediation ids are lowercase snake_case names of registered actions (e.g. ssh_permit_root_login).
+# This is only the format check; the registry in remediator.ACTIONS is the real allowlist.
+REMEDIATION_ID_RE = re.compile(r"^[a-z][a-z0-9_]{2,63}$")
 
 # Regex for snapshot IDs (e.g., SNAP-abc12345)
 SNAPSHOT_ID_RE = re.compile(r"^SNAP-[a-zA-Z0-9]{8,32}$")
