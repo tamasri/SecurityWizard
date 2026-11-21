@@ -3,6 +3,7 @@
 import os
 import stat
 import glob
+import logging
 import traceback
 
 from common import (
@@ -17,27 +18,47 @@ from common import (
     STATUS_INFO,
     STATUS_SKIPPED,
 )
+from config import get_config
 
 CATEGORY = "privilege"
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
 # PRV-001  SUID/SGID binary hunter vs known-safe baseline
 # ---------------------------------------------------------------------------
+def build_find_cmd(paths):
+    """Build the correct `find` argv for SUID/SGID hunting.
+
+    All paths come first, then -xdev, then prune exclusions, then the
+    -perm /6000 -type f expression.  This avoids the classic
+    "paths must precede expression" error.
+    """
+    cmd = ["find"]
+    cmd.extend(paths)
+    cmd.append("-xdev")
+    exclusions = [
+        "/proc", "/sys",
+        "/var/lib/docker", "/var/lib/containerd",
+        "/snap", "/var/snap", "/var/lib/snapd",
+    ]
+    for ex in exclusions:
+        cmd.extend(["-path", ex, "-prune", "-o"])
+    cmd.append("-perm")
+    cmd.append("/6000")
+    cmd.append("-type")
+    cmd.append("f")
+    return cmd
+
+
 def _check_suid_sgid():
     """Scan critical paths for SUID/SGID binaries and compare against a whitelist."""
     safe_baseline = {
         "passwd", "sudo", "su", "mount", "umount", "ping", "ping6", "chsh",
         "chfn", "gpasswd", "newgrp", "fusermount", "fusermount3", "pkexec",
         "ssh-agent", "unix_chkpwd", "crontab", "expiry", "chage", "wall",
-        "write", "dotlockfile", "mount.nfs", "Xorg.wrap", "newgrp",
-        "mail", "mailx", "mailq", "mailstats", "mailx", "mail",
-        "newgrp", "su", "sudo", "pkexec", "ssh-agent", "unix_chkpwd",
-        "crontab", "expiry", "chage", "wall", "write", "dotlockfile",
-        "mount.nfs", "Xorg.wrap", "newgrp", "mail", "mailx", "mailq",
-        "mailstats", "mailx", "mail", "newgrp", "su", "sudo", "pkexec",
-        "ssh-agent", "unix_chkpwd", "crontab", "expiry", "chage", "wall",
-        "write", "dotlockfile", "mount.nfs", "Xorg.wrap", "newgrp",
+        "write", "dotlockfile", "mount.nfs", "Xorg.wrap",
+        "mail", "mailx", "mailq", "mailstats",
     }
     risky_gtfo = {
         "vim", "vi", "find", "bash", "sh", "dash", "python", "python2",
@@ -65,11 +86,11 @@ def _check_suid_sgid():
             "Only known-safe SUID/SGID binaries present",
         )
 
-    cmd_args = []
-    for p in existing:
-        cmd_args.extend(["find", p, "-xdev", "-perm", "/6000", "-type", "f"])
+    cmd_args = build_find_cmd(existing)
     rc, out, err = run_cmd(cmd_args, timeout=120)
     if rc != 0:
+        reason = ("find failed: " + err.strip()) if err.strip() else "find failed (rc=%d)" % rc
+        logger.warning("PRV-001: %s", reason)
         return make_check(
             "PRV-001", CATEGORY,
             "SUID/SGID binary hunter vs known-safe baseline",
@@ -77,21 +98,35 @@ def _check_suid_sgid():
             "Scans critical paths for binaries with SUID/SGID bits and compares them against a known-safe baseline whitelist.",
             "An attacker who can write to or replace a SUID/SGID binary can escalate to root.",
             " ".join(cmd_args),
-            "find failed: " + err.strip(),
+            reason,
             "Only known-safe SUID/SGID binaries present",
         )
 
     binaries = [line.strip() for line in out.splitlines() if line.strip()]
+
+    # Build the set of dpkg-owned files from /var/lib/dpkg/info/*.list
+    dpkg_owned = set()
+    for list_file in glob.glob("/var/lib/dpkg/info/*.list"):
+        for line in read_text(list_file).splitlines():
+            line = line.strip()
+            if line:
+                dpkg_owned.add(line)
+
     details = []
     risky_found = []
     unknown_found = []
     for binary in binaries:
         name = os.path.basename(binary)
-        if name in safe_baseline:
-            details.append("SAFE: " + binary)
-        elif name in risky_gtfo:
+        if get_config().allowed_suid(binary):
+            details.append("ALLOWED: " + binary)
+            continue
+        if name in risky_gtfo:
             details.append("RISKY: " + binary)
             risky_found.append(binary)
+        elif binary in dpkg_owned:
+            details.append("SAFE (dpkg): " + binary)
+        elif name in safe_baseline:
+            details.append("SAFE: " + binary)
         else:
             details.append("UNKNOWN: " + binary)
             unknown_found.append(binary)
@@ -104,7 +139,7 @@ def _check_suid_sgid():
         current_value = "Found " + str(len(unknown_found)) + " unknown SUID/SGID binaries: " + ", ".join(unknown_found)
     else:
         status = STATUS_PASS
-        current_value = "All " + str(len(binaries)) + " SUID/SGID binaries are in the safe baseline"
+        current_value = "All " + str(len(binaries)) + " SUID/SGID binaries are in the safe baseline or dpkg-owned"
 
     return make_check(
         "PRV-001", CATEGORY,
