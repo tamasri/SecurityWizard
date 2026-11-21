@@ -457,46 +457,65 @@ def _check_cron():
 
 
 # ---------------------------------------------------------------------------
-# PRV-008  Dangerous NOPASSWD: ALL entries in sudoers
+# PRV-008  Dangerous sudoers rules (NOPASSWD: ALL, wildcards, risky commands)
 # ---------------------------------------------------------------------------
 def _check_nopasswd():
-    """Grep /etc/sudoers and /etc/sudoers.d/* for NOPASSWD: ALL."""
+    """Parse /etc/sudoers and /etc/sudoers.d/* and classify each rule."""
+    from sudoers_parse import parse_all_sudoers, classify_rule
+
     details = []
-    dangerous = []
-    sudoers_path = "/etc/sudoers"
-    if os.path.isfile(sudoers_path):
-        content = read_text(sudoers_path)
-        for line in content.splitlines():
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#") and "NOPASSWD" in stripped and "ALL" in stripped:
-                details.append(sudoers_path + ": " + stripped)
-                dangerous.append(sudoers_path)
-    for f in sorted(glob.glob("/etc/sudoers.d/*")):
-        if os.path.isfile(f):
-            content = read_text(f)
-            for line in content.splitlines():
-                stripped = line.strip()
-                if stripped and not stripped.startswith("#") and "NOPASSWD" in stripped and "ALL" in stripped:
-                    details.append(f + ": " + stripped)
-                    dangerous.append(f)
-    if dangerous:
+    critical_rules = []
+    warning_rules = []
+    info_rules = []
+
+    rules = parse_all_sudoers()
+    config = get_config()
+
+    for rule in rules:
+        severity, reason = classify_rule(rule, config)
+        detail_line = "%s:%d: %s => %s (%s)" % (
+            rule.source_file, rule.line, rule.raw, severity, reason)
+        details.append(detail_line)
+        if severity == STATUS_CRITICAL:
+            critical_rules.append(rule)
+        elif severity == STATUS_WARNING:
+            warning_rules.append(rule)
+        elif severity == STATUS_INFO:
+            info_rules.append(rule)
+
+    if critical_rules:
         status = STATUS_CRITICAL
-        current_value = "NOPASSWD: ALL found in: " + ", ".join(sorted(set(dangerous)))
+        current_value = "Found %d critical sudoers rule(s): %s" % (
+            len(critical_rules),
+            "; ".join(r.raw for r in critical_rules))
+    elif warning_rules:
+        status = STATUS_WARNING
+        current_value = "Found %d warning-level sudoers rule(s): %s" % (
+            len(warning_rules),
+            "; ".join(r.raw for r in warning_rules))
+    elif info_rules:
+        status = STATUS_INFO
+        current_value = "Found %d narrow/info-level sudoers rule(s)" % len(info_rules)
     else:
         status = STATUS_PASS
-        current_value = "No NOPASSWD: ALL entries found"
+        current_value = "No sudoers rules found"
+
     return make_check(
         "PRV-008", CATEGORY,
-        "Dangerous NOPASSWD: ALL entries in sudoers",
+        "Sudoers rule analysis (NOPASSWD, wildcards, risky commands)",
         status,
-        "Greps /etc/sudoers and /etc/sudoers.d/* for entries that allow any user to run any command as root without a password.",
-        "A NOPASSWD: ALL entry lets any user run any command as root without entering a password, giving full root access.",
-        "grep -r 'NOPASSWD.*ALL' /etc/sudoers /etc/sudoers.d/",
+        "Parses /etc/sudoers and /etc/sudoers.d/* and classifies each rule: "
+        "CRITICAL for NOPASSWD: ALL or wildcard on shell/interpreter/editor, "
+        "WARNING for risky commands (GTFOBins), INFO for narrow exact-command rules.",
+        "A NOPASSWD: ALL entry or a wildcard on a shell/editor lets a user run any "
+        "command as root without a password, giving full root access. Risky commands "
+        "like vim, find, docker can also spawn a shell.",
+        "Parse /etc/sudoers and /etc/sudoers.d/* with sudoers_parse",
         current_value,
-        "No NOPASSWD: ALL entries",
+        "No critical or warning-level sudoers rules",
         details,
         remediation_id=None,
-        manual_command="grep -r 'NOPASSWD.*ALL' /etc/sudoers /etc/sudoers.d/ 2>/dev/null",
+        manual_command="visudo -c && grep -r 'NOPASSWD\\|ALL' /etc/sudoers /etc/sudoers.d/ 2>/dev/null",
     )
 
 
