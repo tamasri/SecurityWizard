@@ -8,7 +8,15 @@ import shutil
 import shlex
 import subprocess
 import threading
+import logging
+import re
+import tempfile
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger("securitywizard")
+
+import deadman
 
 def _now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -23,6 +31,12 @@ for _mod in ("actions_network", "actions_ssh", "actions_system"):
         ACTIONS.update(m.ACTIONS)
     except ImportError:
         pass
+
+_REMEDIATION_ID_RE = re.compile(r"^[A-Z]{3}-\d{3}$")
+
+
+def _validate_remediation_id(rid: str) -> bool:
+    return bool(_REMEDIATION_ID_RE.match(rid)) and rid in ACTIONS
 
 _lock = threading.Lock()
 
@@ -41,7 +55,7 @@ def _allow_nonroot():
 def _bdir():
     return os.environ.get("SECURITYWIZARD_BACKUP_DIR", "/var/backups/securitywizard")
 
-def _run_cmd(args, timeout=120):
+def _run_cmd(args: List[str], timeout: float = 120.0) -> Tuple[int, str, str]:
     try:
         r = subprocess.run(list(args), capture_output=True, text=True, timeout=timeout)
         return r.returncode, r.stdout, r.stderr
@@ -50,6 +64,7 @@ def _run_cmd(args, timeout=120):
     except subprocess.TimeoutExpired:
         return 124, "", "timeout"
     except Exception as e:
+        logger.exception("Unexpected error running command %s", " ".join(args))
         return 1, "", str(e)
 
 def _file_snapshot(path, snap_dir):
@@ -77,13 +92,12 @@ def _file_snapshot(path, snap_dir):
         "gid": st.st_gid,
     }
 
-def _atomic_write(path, content, orig_stat=None):
+def _atomic_write(path: str, content: str, orig_stat=None) -> None:
     d = os.path.dirname(path) or "."
     if d:
         os.makedirs(d, exist_ok=True)
     fd, tmp = None, None
     try:
-        import tempfile
         fd, tmp = tempfile.mkstemp(dir=d)
         with os.fdopen(fd, "w") as f:
             f.write(content)
@@ -102,12 +116,46 @@ def _atomic_write(path, content, orig_stat=None):
             os.unlink(tmp)
         raise
 
-def _get_plan(rid):
+
+def _run_validators(validators: List[List[str]], runner) -> List[str]:
+    """Run each validator command list.  Returns a list of failure messages
+    (empty if all passed)."""
+    failures = []
+    for cmd in validators:
+        rc, so, se = runner(cmd)
+        if rc != 0:
+            failures.append(" ".join(cmd) + " rc=" + str(rc) + (" " + se if se else ""))
+    return failures
+
+def _get_plan(rid: str) -> Optional[dict]:
     if rid not in ACTIONS:
         return None
     return ACTIONS[rid]["build_plan"]()
 
-def preview(remediation_id):
+
+def _check_idempotent(plan: dict) -> bool:
+    """Return True if the plan would change nothing (all file contents already
+    match and all permissions already match)."""
+    for fc in plan.get("file_changes", []):
+        p = fc["path"]
+        try:
+            with open(p, "r") as f:
+                current = f.read()
+        except (OSError, IOError):
+            return False
+        if current != fc["new_content"]:
+            return False
+    for pc in plan.get("perm_changes", []):
+        p = pc["path"]
+        try:
+            st = os.stat(p)
+        except (OSError, FileNotFoundError):
+            return False
+        if stat.S_IMODE(st.st_mode) != pc["mode"]:
+            return False
+    return True
+
+def preview(remediation_id: str) -> dict:
     out = {
         "remediation_id": remediation_id,
         "title": "",
@@ -121,7 +169,7 @@ def preview(remediation_id):
         "requires_root": False,
     }
     try:
-        if remediation_id not in ACTIONS:
+        if not _validate_remediation_id(remediation_id):
             out["blocked"] = True
             out["blocked_reason"] = "Unknown remediation"
             return out
@@ -164,8 +212,18 @@ def preview(remediation_id):
         out["blocked_reason"] = str(e)
     return out
 
-def apply(remediation_id, confirm=False):
-    out = {"ok": False, "message": "", "snapshot_id": None, "output": []}
+def apply(remediation_id: str, confirm: bool = False, runner=None,
+          precondition=None) -> dict:
+    """Apply a remediation.
+
+    *runner* is an optional callable ``(args: List[str]) -> (rc, stdout, stderr)``
+    used instead of ``_run_cmd`` (for tests).  *precondition* is an optional
+    callable ``(plan) -> Optional[str]`` that may refuse the change.
+
+    Returns a dict with keys ``ok``, ``message``, ``snapshot_id``, ``output``,
+    and optionally ``deadman_token`` / ``deadline`` for risky_remote actions.
+    """
+    out: Dict[str, Any] = {"ok": False, "message": "", "snapshot_id": None, "output": []}
     try:
         if not confirm:
             out["message"] = "confirm must be True"
@@ -176,7 +234,7 @@ def apply(remediation_id, confirm=False):
         if not _is_root() and not _allow_nonroot():
             out["message"] = "requires root"
             return out
-        if remediation_id not in ACTIONS:
+        if not _validate_remediation_id(remediation_id):
             out["message"] = "Unknown remediation"
             return out
         info = ACTIONS[remediation_id]
@@ -188,6 +246,16 @@ def apply(remediation_id, confirm=False):
         if plan.get("blockers"):
             out["message"] = "blocked: " + "; ".join(plan["blockers"])
             return out
+        if precondition is not None:
+            reason = precondition(plan)
+            if reason is not None:
+                out["message"] = "precondition: " + reason
+                return out
+        if _check_idempotent(plan):
+            out["message"] = "already applied"
+            out["ok"] = True
+            return out
+        run = runner or _run_cmd
         with _lock:
             snap_dir = os.path.join(_bdir(), _snap_id(remediation_id))
             os.makedirs(snap_dir, exist_ok=True)
@@ -221,14 +289,14 @@ def apply(remediation_id, confirm=False):
             for pc in plan.get("perm_changes", []):
                 os.chmod(pc["path"], pc["mode"])
             for cmd in plan.get("validate_commands", []):
-                rc, so, se = _run_cmd(cmd)
+                rc, so, se = run(cmd)
                 out["output"].append("validate " + shlex.join(cmd) + " rc=" + str(rc))
                 if rc != 0:
                     rollback(out["snapshot_id"])
                     out["message"] = "validation failed, rolled back"
                     return out
             for cmd in plan.get("commands", []):
-                rc, so, se = _run_cmd(cmd)
+                rc, so, se = run(cmd)
                 out["output"].append(shlex.join(cmd) + " rc=" + str(rc))
                 if so:
                     out["output"].append(so)
@@ -236,7 +304,19 @@ def apply(remediation_id, confirm=False):
                     out["output"].append(se)
             out["ok"] = True
             out["message"] = "applied"
+            if info.get("risky_remote"):
+                token = "DM-" + remediation_id
+                minutes = info.get("deadman_minutes", 5)
+                deadline = time.time() + minutes * 60.0
+
+                def _revert():
+                    rollback(out["snapshot_id"])
+
+                deadman.arm(token, _revert, minutes, _bdir())
+                out["deadman_token"] = token
+                out["deadline"] = deadline
     except Exception as e:
+        logger.exception("apply(%s) failed", remediation_id)
         out["message"] = str(e)
     return out
 
