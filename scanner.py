@@ -1,9 +1,13 @@
 import importlib
 import logging
+import traceback
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from common import STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED, make_check, skipped_check
+from common import (
+    STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED,
+    make_check, skipped_check,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +21,13 @@ MODULES = [
 ]
 
 
-def _run_module(category, module_name):
+def _run_module(category: str, module_name: str) -> List[dict]:
     try:
         mod = importlib.import_module(module_name)
         return mod.run_checks()
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Unexpected error in %s module", module_name)
+        reason = "{}: {}".format(type(exc).__name__, exc)
         return [skipped_check(
             id="SCN-" + category,
             category=category,
@@ -29,7 +35,7 @@ def _run_module(category, module_name):
             what_it_checks="Failed to load the " + category + " checks module.",
             risk="The " + category + " checks could not be evaluated.",
             command=module_name,
-            reason=str(e),
+            reason=reason,
         )]
 
 
