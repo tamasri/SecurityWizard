@@ -7,6 +7,9 @@ Implements the 'network' category checks:
   NET-004  Docker published ports bypassing UFW (DOCKER-USER chain)
 """
 
+import re
+import logging
+
 from common import (
     run_cmd,
     read_text,
@@ -19,87 +22,62 @@ from common import (
     STATUS_INFO,
     STATUS_SKIPPED,
 )
+from config import get_config
+
+logger = logging.getLogger("securitywizard")
+
+_PROCESS_RE = re.compile(r'users:\(\("([^"]+)",pid=(\d+)')
+
+
+def parse_ss_line(line: str):
+    """Parse a single line of `ss -tulnpH` output.
+
+    Returns a dict with keys proto, state, addr, port, process, pid,
+    or None if the line is empty or too short.
+    """
+    line = line.strip()
+    if not line:
+        return None
+    parts = line.split()
+    if len(parts) < 4:
+        return None
+    proto = parts[0]
+    state = parts[1]
+    local = parts[4]
+    if ":" in local:
+        addr, port = local.rsplit(":", 1)
+        addr = addr.strip("[]")
+    else:
+        addr = local
+        port = ""
+    process_name = ""
+    pid = ""
+    if len(parts) > 5:
+        proc_part = " ".join(parts[5:])
+        m = _PROCESS_RE.search(proc_part)
+        if m:
+            process_name = m.group(1)
+            pid = m.group(2)
+    return {
+        "proto": proto,
+        "state": state,
+        "addr": addr,
+        "port": port,
+        "process": process_name,
+        "pid": pid,
+    }
 
 
 def _parse_ss_output(output: str) -> list:
-    """Parse ss -tulpn output into a list of dicts.
+    """Parse ss -tulnpH output into a list of dicts.
 
-    Each dict has keys: proto, state, local, remote, process, pid.
+    Each dict has keys: proto, state, addr, port, process, pid.
     """
     results = []
     for line in output.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        # Skip the header line
-        if line.startswith("State") or line.startswith("Netid"):
-            continue
-
-        parts = line.split()
-        if len(parts) < 4:
-            continue
-
-        proto = parts[0]
-        # ss -tulpn output columns:
-        # State Recv-Q Send-Q Local Address:Port Peer Address:Port Process
-        # or: Netid State Recv-Q Send-Q Local Address:Port Peer Address:Port Process
-        # UDP lines have no state column, so shift indices.
-        if proto.upper() in ("UDP", "UDP-LITE"):
-            # No state column for UDP
-            recv_q = parts[1]
-            send_q = parts[2]
-            local = parts[3]
-            remote = parts[4] if len(parts) > 4 else "*"
-            process_part = parts[5] if len(parts) > 5 else ""
-        else:
-            # TCP has a state column
-            state = parts[1]
-            recv_q = parts[2]
-            send_q = parts[3]
-            local = parts[4]
-            remote = parts[5] if len(parts) > 5 else "*"
-            process_part = parts[6] if len(parts) > 6 else ""
-
-        # Extract process name and PID from process_part
-        process_name = ""
-        pid = ""
-        if process_part:
-            # Format: users:(("name",pid=123,fd=4))
-            if "users:" in process_part:
-                inner = process_part.split("users:")[-1].strip()
-                # inner looks like (("name",pid=123,fd=4))
-                # Extract name between first ( and first ,
-                inner_stripped = inner.strip("()")
-                if "," in inner_stripped:
-                    name_part = inner_stripped.split(",")[0].strip().strip('"')
-                    process_name = name_part
-                # Extract pid
-                if "pid=" in inner_stripped:
-                    pid_part = inner_stripped.split("pid=")[-1]
-                    pid = pid_part.split(",")[0].strip(")")
-
-        # Parse local address and port
-        # local can be like "0.0.0.0:80", "[::]:80", "127.0.0.1:5432", "*:80"
-        if ":" in local:
-            # Split on the last colon to handle IPv6
-            addr, port = local.rsplit(":", 1)
-            # Remove brackets from IPv6 addresses
-            addr = addr.strip("[]")
-        else:
-            addr = local
-            port = ""
-
-        results.append({
-            "proto": proto,
-            "state": parts[1] if proto.upper() not in ("UDP", "UDP-LITE") else "",
-            "local": local,
-            "remote": remote,
-            "process": process_name,
-            "pid": pid,
-            "addr": addr,
-            "port": port,
-        })
-
+        parsed = parse_ss_line(line)
+        if parsed is not None:
+            results.append(parsed)
     return results
 
 
@@ -111,7 +89,8 @@ def _is_dangerous_port(port: str) -> bool:
         return False
     dangerous_ports = {
         2375, 2376, 3306, 5432, 6379,
-        27017, 9200, 11211, 5984, 1433, 3389, 5900,
+        27017, 9200, 9300, 11211, 5984, 1433, 3389, 5900,
+        2379, 10250,
     }
     return p in dangerous_ports
 
@@ -122,14 +101,15 @@ def _is_exposed_to_all(addr: str) -> bool:
 
 
 def check_net_001():
-    """NET-001: Listening TCP/UDP sockets (ss -tulpn)."""
-    cmd = ["ss", "-tulpn"]
-    rc, out, err = run_cmd(cmd)
+    """NET-001: Listening TCP/UDP sockets (ss -tulnpH)."""
+    cmd = ["ss", "-tulnpH"]
+    res = run_cmd(cmd)
+    rc, out, err = res.returncode, res.stdout, res.stderr
 
     if rc == 127:
         return skipped_check(
             "NET-001", "network",
-            "Listening TCP/UDP sockets (ss -tulpn)",
+            "Listening TCP/UDP sockets (ss -tulnpH)",
             "Enumerates every TCP and UDP socket currently in LISTEN state, "
             "showing the protocol, local address and port, peer address, "
             "and the owning process name and PID.",
@@ -137,14 +117,14 @@ def check_net_001():
             "cannot tell which services are reachable from the network, making it "
             "easy to miss a forgotten database or cache server that is exposed "
             "to the world.",
-            "ss -tulpn",
+            "ss -tulnpH",
             "ss binary not found; install iproute2 (apt install iproute2)",
         )
 
     if rc != 0:
         return skipped_check(
             "NET-001", "network",
-            "Listening TCP/UDP sockets (ss -tulpn)",
+            "Listening TCP/UDP sockets (ss -tulnpH)",
             "Enumerates every TCP and UDP socket currently in LISTEN state, "
             "showing the protocol, local address and port, peer address, "
             "and the owning process name and PID.",
@@ -152,7 +132,7 @@ def check_net_001():
             "cannot tell which services are reachable from the network, making it "
             "easy to miss a forgotten database or cache server that is exposed "
             "to the world.",
-            "ss -tulpn",
+            "ss -tulnpH",
             f"ss returned error: {err.strip()}",
         )
 
@@ -160,22 +140,18 @@ def check_net_001():
     details = []
     for s in sockets:
         proto = s["proto"].upper()
-        local = s["local"]
+        addr = s["addr"]
+        port = s["port"]
         process = s["process"] or "unknown"
         pid = s["pid"] or "0"
-        state = s.get("state", "")
-        if proto.startswith("TCP"):
-            line = f"TCP  {local}  {process} (pid {pid})"
-            if state:
-                line += f"  [{state}]"
-        else:
-            line = f"{proto}  {local}  {process} (pid {pid})"
+        local_display = f"[{addr}]:{port}" if ":" in addr and not addr.startswith("0.") else f"{addr}:{port}"
+        line = f"{proto}  {local_display}  {process} (pid {pid})"
         details.append(line)
 
     current_value = f"{len(sockets)} listening socket(s)"
     return make_check(
         "NET-001", "network",
-        "Listening TCP/UDP sockets (ss -tulpn)",
+        "Listening TCP/UDP sockets (ss -tulnpH)",
         STATUS_INFO,
         "Enumerates every TCP and UDP socket currently in LISTEN state, "
         "showing the protocol, local address and port, peer address, "
@@ -184,19 +160,20 @@ def check_net_001():
         "cannot tell which services are reachable from the network, making it "
         "easy to miss a forgotten database or cache server that is exposed "
         "to the world.",
-        "ss -tulpn",
+        "ss -tulnpH",
         current_value,
         "Review each socket and confirm every listening service is intentional.",
         details=details,
         remediation_id=None,
-        manual_command="ss -tulpn",
+        manual_command="ss -tulnpH",
     )
 
 
 def check_net_002():
     """NET-002: Dangerous services exposed on all interfaces."""
-    cmd = ["ss", "-tulpn"]
-    rc, out, err = run_cmd(cmd)
+    cmd = ["ss", "-tulnpH"]
+    res = run_cmd(cmd)
+    rc, out, err = res.returncode, res.stdout, res.stderr
 
     if rc == 127:
         return skipped_check(
@@ -204,13 +181,13 @@ def check_net_002():
             "Dangerous services exposed on all interfaces (0.0.0.0 / ::)",
             "Scans all listening sockets and flags well-known backend services "
             "(PostgreSQL, MySQL, Redis, MongoDB, Elasticsearch, Memcached, CouchDB, "
-            "SQL Server, RDP, VNC, Docker API) that are bound to 0.0.0.0, ::, or * "
-            "instead of 127.0.0.1.",
+            "SQL Server, RDP, VNC, Docker API, etcd, Kubelet) that are bound to "
+            "0.0.0.0, ::, or * instead of 127.0.0.1.",
             "A database or cache engine listening on all interfaces is reachable "
             "from any host on the network. An attacker who scans the subnet can "
             "connect directly, read or modify data, and often escalate privileges "
             "through SQL injection or unauthenticated admin APIs.",
-            "ss -tulpn",
+            "ss -tulnpH",
             "ss binary not found; install iproute2 (apt install iproute2)",
         )
 
@@ -220,26 +197,49 @@ def check_net_002():
             "Dangerous services exposed on all interfaces (0.0.0.0 / ::)",
             "Scans all listening sockets and flags well-known backend services "
             "(PostgreSQL, MySQL, Redis, MongoDB, Elasticsearch, Memcached, CouchDB, "
-            "SQL Server, RDP, VNC, Docker API) that are bound to 0.0.0.0, ::, or * "
-            "instead of 127.0.0.1.",
+            "SQL Server, RDP, VNC, Docker API, etcd, Kubelet) that are bound to "
+            "0.0.0.0, ::, or * instead of 127.0.0.1.",
             "A database or cache engine listening on all interfaces is reachable "
             "from any host on the network. An attacker who scans the subnet can "
             "connect directly, read or modify data, and often escalate privileges "
             "through SQL injection or unauthenticated admin APIs.",
-            "ss -tulpn",
+            "ss -tulnpH",
             f"ss returned error: {err.strip()}",
         )
 
     sockets = _parse_ss_output(out)
     dangerous = []
+    try:
+        cfg = get_config()
+    except Exception:
+        cfg = None
+
     for s in sockets:
         addr = s["addr"]
         port = s["port"]
-        if _is_exposed_to_all(addr) and _is_dangerous_port(port):
-            process = s["process"] or "unknown"
-            pid = s["pid"] or "0"
-            proto = s["proto"].upper()
-            dangerous.append(f"{proto}  {s['local']}  {process} (pid {pid})  port {port}")
+        if not (_is_exposed_to_all(addr) and _is_dangerous_port(port)):
+            continue
+        process = s["process"] or "unknown"
+        pid = s["pid"] or "0"
+        proto = s["proto"].upper()
+        local_display = f"[{addr}]:{port}" if ":" in addr and not addr.startswith("0.") else f"{addr}:{port}"
+
+        allowed = False
+        if cfg is not None:
+            try:
+                port_int = int(port)
+                allow_entry = cfg.allowed_listener(port_int, process)
+                if allow_entry is not None:
+                    allowed = True
+            except (ValueError, TypeError):
+                pass
+            except Exception as exc:
+                logger.warning("allowed_listener failed for port %s process %s: %s", port, process, exc)
+
+        if allowed:
+            continue
+
+        dangerous.append(f"{proto}  {local_display}  {process} (pid {pid})")
 
     if dangerous:
         status = STATUS_CRITICAL
@@ -256,18 +256,18 @@ def check_net_002():
         status,
         "Scans all listening sockets and flags well-known backend services "
         "(PostgreSQL, MySQL, Redis, MongoDB, Elasticsearch, Memcached, CouchDB, "
-        "SQL Server, RDP, VNC, Docker API) that are bound to 0.0.0.0, ::, or * "
-        "instead of 127.0.0.1.",
+        "SQL Server, RDP, VNC, Docker API, etcd, Kubelet) that are bound to "
+        "0.0.0.0, ::, or * instead of 127.0.0.1.",
         "A database or cache engine listening on all interfaces is reachable "
         "from any host on the network. An attacker who scans the subnet can "
         "connect directly, read or modify data, and often escalate privileges "
         "through SQL injection or unauthenticated admin APIs.",
-        "ss -tulpn",
+        "ss -tulnpH",
         current_value,
         recommended,
         details=dangerous,
         remediation_id=None,
-        manual_command="ss -tulpn | grep -E ':(2375|2376|3306|5432|6379|27017|9200|11211|5984|1433|3389|5900)\\s'",
+        manual_command="ss -tulnpH | grep -E ':(2375|2376|3306|5432|6379|27017|9200|9300|11211|5984|1433|3389|5900|2379|10250)\\s'",
     )
 
 
@@ -378,10 +378,10 @@ def run_checks() -> list:
     except Exception as e:
         checks.append(skipped_check(
             "NET-001", "network",
-            "Listening TCP/UDP sockets (ss -tulpn)",
+            "Listening TCP/UDP sockets (ss -tulnpH)",
             "Enumerates every TCP and UDP socket currently in LISTEN state.",
             "Without a socket inventory, exposed services go unnoticed.",
-            "ss -tulpn",
+            "ss -tulnpH",
             f"Unexpected error: {e}",
         ))
 
@@ -393,7 +393,7 @@ def run_checks() -> list:
             "Dangerous services exposed on all interfaces (0.0.0.0 / ::)",
             "Flags backend services bound to all interfaces instead of loopback.",
             "Exposed databases and caches are reachable from any network host.",
-            "ss -tulpn",
+            "ss -tulnpH",
             f"Unexpected error: {e}",
         ))
 
