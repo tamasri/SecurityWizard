@@ -18,6 +18,7 @@ MODULES = [
     ("privilege", "checks_privilege"),
     ("docker", "checks_docker"),
     ("logs", "checks_logs"),
+    ("misc", "checks_misc"),
 ]
 
 
