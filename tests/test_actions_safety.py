@@ -56,14 +56,14 @@ class TestSSHValidators:
 class TestNetworkPreconditions:
     def test_ufw_baseline_refused_without_ssh_ports(self):
         """UFW baseline should be refused if SSH ports cannot be determined."""
-        with patch.object(actions_network, "_detect_ssh_ports", return_value=[]):
+        with patch.object(actions_network, "_ufw_installed", return_value=True),              patch.object(actions_network, "_detect_ssh_ports", return_value=[]):
             plan = actions_network._build_ufw_baseline()
             assert len(plan["blockers"]) == 1
             assert "Could not determine the SSH port" in plan["blockers"][0]
 
     def test_ufw_baseline_allowed_with_ssh_ports(self):
         """UFW baseline should be allowed if SSH ports are found."""
-        with patch.object(actions_network, "_detect_ssh_ports", return_value=[22]):
+        with patch.object(actions_network, "_ufw_installed", return_value=True),              patch.object(actions_network, "_detect_ssh_ports", return_value=[22]):
             plan = actions_network._build_ufw_baseline()
             assert len(plan["blockers"]) == 0
 

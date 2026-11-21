@@ -1,7 +1,10 @@
+import pytest
+import sys
 import subprocess
 import os
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only behaviour (file replace semantics / a real bash)")
 def test_setup_sh_syntax():
     result = subprocess.run(
         ["bash", "-n", "setup.sh"],

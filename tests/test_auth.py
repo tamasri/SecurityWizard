@@ -39,9 +39,10 @@ def token_env(monkeypatch):
     monkeypatch.setenv("SECURITYWIZARD_TOKEN", "my-test-token")
     yield
 
-def test_loopback_no_auth(loopback_env):
+def test_loopback_is_locked_by_default(loopback_env):
     auth.init("127.0.0.1")
-    assert auth.is_auth_enabled() == False
+    assert auth.is_auth_enabled() == True
+    assert auth.get_auth_mode() == "credentials"
 
 def test_non_loopback_auth_enabled(loopback_env, monkeypatch):
     auth.init("0.0.0.0")
@@ -79,11 +80,10 @@ def test_custom_allowed_hosts(loopback_env, monkeypatch):
     assert auth.check_host_allowed("otherhost") == True
     assert auth.check_host_allowed("localhost") == False
 
-def test_token_generation(loopback_env, auth_enabled_env):
+def test_token_from_environment(loopback_env, auth_enabled_env, token_env):
     auth.init("0.0.0.0")
-    token = auth.get_generated_token()
-    assert token is not None
-    assert len(token) >= 32
+    assert auth.get_auth_mode() == "token"
+    assert auth.get_generated_token() == "my-test-token"
 
 def test_password_file(loopback_env, auth_enabled_env, monkeypatch, tmp_path):
     pw_hash = auth.hash_password("filepass")

@@ -66,6 +66,7 @@ def test_id_validation_accepts_known_id(tmp_path):
     assert result["blocked"] is False
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only behaviour (file replace semantics / a real bash)")
 def test_validator_failure_leaves_files_untouched(tmp_path):
     path = _setup_file(tmp_path, "etc/ssh/sshd_config", "Port 22\n")
     original = "Port 22\n"
@@ -118,6 +119,7 @@ def test_dry_run_only_blocks_apply(tmp_path):
         assert f.read() == "Port 22\n"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only behaviour (file replace semantics / a real bash)")
 def test_risky_remote_arms_deadman(tmp_path):
     path = _setup_file(tmp_path, "etc/ssh/sshd_config", "Port 22\n")
     _make_action(

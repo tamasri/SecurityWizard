@@ -1,6 +1,8 @@
 """Export scan results to JSON, Markdown, SARIF, and HTML formats."""
 
 import json
+
+from history import scan_counts, scan_score, scan_timestamp
 import logging
 from html import escape
 from typing import Any, Dict, List
@@ -27,12 +29,12 @@ def to_markdown(result: Dict[str, Any]) -> str:
     lines.append("# SecurityWizard Scan Report")
     lines.append("")
     lines.append(f"**Scan ID:** {result.get('scan_id', 'N/A')}")
-    lines.append(f"**Timestamp:** {result.get('timestamp', 'N/A')}")
+    lines.append(f"**Timestamp:** {scan_timestamp(result) or 'N/A'}")
     lines.append("")
-    score = result.get("score", {})
-    lines.append(f"**Score:** {score.get('total', 0)}/100")
+    total = scan_score(result)
+    lines.append(f"**Score:** {'not scored' if total is None else str(total) + '/100'}")
     lines.append("")
-    counts = result.get("status_counts", {})
+    counts = scan_counts(result)
     if counts:
         lines.append("**Status counts:** " + ", ".join(f"{k}: {v}" for k, v in sorted(counts.items())))
         lines.append("")
@@ -140,8 +142,8 @@ def to_sarif(result: Dict[str, Any]) -> str:
 def to_html(result: Dict[str, Any]) -> str:
     """Return a self-contained single-page HTML report with all text escaped."""
     checks = result.get("checks", [])
-    score = result.get("score", {})
-    counts = result.get("status_counts", {})
+    total = scan_score(result)
+    counts = scan_counts(result)
 
     def esc(s: Any) -> str:
         return escape(str(s), quote=True)
@@ -199,8 +201,8 @@ ul {{ margin: 0; padding-left: 1.2rem; }}
 <h1>SecurityWizard Scan Report</h1>
 <div class="meta">
 <p><strong>Scan ID:</strong> {esc(result.get('scan_id', 'N/A'))}</p>
-<p><strong>Timestamp:</strong> {esc(result.get('timestamp', 'N/A'))}</p>
-<p><strong>Score:</strong> {esc(score.get('total', 0))}/100</p>
+<p><strong>Timestamp:</strong> {esc(scan_timestamp(result) or 'N/A')}</p>
+<p><strong>Score:</strong> {esc('not scored' if total is None else str(total) + '/100')}</p>
 <p><strong>Status counts:</strong> {counts_html}</p>
 </div>
 <table>

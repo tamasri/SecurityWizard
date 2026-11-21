@@ -17,6 +17,22 @@ def _history_dir() -> str:
     return os.path.join(backup_dir, "history")
 
 
+def scan_score(scan: Dict[str, Any]) -> Optional[int]:
+    """Score of a scan result: the scanner stores a number (or None when nothing was scored); older files used {"total": n}."""
+    value = scan.get("score")
+    if isinstance(value, dict):
+        value = value.get("total")
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def scan_counts(scan: Dict[str, Any]) -> Dict[str, Any]:
+    return scan.get("status_counts") or scan.get("counts") or {}
+
+
+def scan_timestamp(scan: Dict[str, Any]) -> str:
+    return str(scan.get("timestamp") or scan.get("finished") or scan.get("started") or "")
+
+
 def save_scan(result: Dict[str, Any]) -> str:
     """Persist a scan result dict to disk and return the scan id."""
     scan_id = result.get("scan_id", "")
@@ -52,9 +68,9 @@ def list_scans() -> List[Dict[str, Any]]:
             continue
         out.append({
             "scan_id": sid,
-            "timestamp": data.get("timestamp", ""),
-            "score": data.get("score", {}).get("total", 0),
-            "status_counts": data.get("status_counts", {}),
+            "timestamp": scan_timestamp(data),
+            "score": scan_score(data),
+            "status_counts": scan_counts(data),
         })
     out.sort(key=lambda x: x["timestamp"], reverse=True)
     return out
@@ -108,8 +124,8 @@ def diff_scans(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
             if oc["status"] != "SKIPPED":
                 resolved.append(cid)
 
-    old_score = old.get("score", {}).get("total", 0)
-    new_score = new.get("score", {}).get("total", 0)
+    old_score = scan_score(old) or 0
+    new_score = scan_score(new) or 0
 
     return {
         "new_findings": sorted(new_findings),
