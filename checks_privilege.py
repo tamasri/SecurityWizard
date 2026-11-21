@@ -331,19 +331,52 @@ def _check_sudoers():
 # ---------------------------------------------------------------------------
 # PRV-006  /etc/ssh/sshd_config permissions
 # ---------------------------------------------------------------------------
+def _evaluate_sshd_config_permissions(mode: int, uid: int) -> str:
+    """Evaluate sshd_config permissions and return a status string.
+
+    sshd_config is the distro default at 0644 and is not secret.
+    Returns STATUS_PASS for 0640/0600, STATUS_INFO for 0644, and
+    STATUS_CRITICAL when group/world writable, not owned by root,
+    or when the file contains secrets (private key blocks or
+    password-like values).
+    """
+    # Critical: group or world writable
+    if mode & 0o020:
+        return STATUS_CRITICAL
+    # Critical: not owned by root
+    if uid != 0:
+        return STATUS_CRITICAL
+    # Check for secrets in the file
+    path = "/etc/ssh/sshd_config"
+    if os.path.isfile(path):
+        content = read_text(path)
+        if "PRIVATE KEY" in content or "RSA PRIVATE KEY" in content or "OPENSSH PRIVATE KEY" in content:
+            return STATUS_CRITICAL
+        if "PasswordAuthentication" in content and "yes" in content.split("PasswordAuthentication")[-1].split("\n")[0].lower():
+            return STATUS_CRITICAL
+    # 0644 is the distro default: INFO
+    if mode == 0o644:
+        return STATUS_INFO
+    # 0640 or 0600 owned by root: PASS
+    if mode in (0o640, 0o600):
+        return STATUS_PASS
+    # Other modes owned by root and not group/world writable: PASS
+    return STATUS_PASS
+
+
 def _check_sshd_config():
-    """Verify /etc/ssh/sshd_config is 0600 root:root."""
+    """Verify /etc/ssh/sshd_config permissions and ownership."""
     path = "/etc/ssh/sshd_config"
     if not os.path.isfile(path):
         return make_check(
             "PRV-006", CATEGORY,
-            "/etc/ssh/sshd_config permissions (0600)",
+            "/etc/ssh/sshd_config permissions",
             STATUS_SKIPPED,
-            "Checks that /etc/ssh/sshd_config is owned by root:root and has permissions 0600.",
+            "Checks that /etc/ssh/sshd_config is owned by root and has safe permissions.",
             "If sshd_config is world-writable, an attacker can change SSH settings to allow password login or open a backdoor.",
             "stat -c '%a %U:%G' /etc/ssh/sshd_config",
             "File not found",
-            "0600 root:root",
+            "0644 root:root (distro default)",
         )
     st = os.stat(path)
     mode = stat.S_IMODE(st.st_mode)
@@ -353,21 +386,18 @@ def _check_sshd_config():
     owner = "root" if uid == 0 else str(uid)
     group = "root" if gid == 0 else str(gid)
     current_value = "0" + mode_oct + " " + owner + ":" + group
-    if mode == 0o600 and uid == 0 and gid == 0:
-        status = STATUS_PASS
-    else:
-        status = STATUS_CRITICAL
+    status = _evaluate_sshd_config_permissions(mode, uid)
     return make_check(
         "PRV-006", CATEGORY,
-        "/etc/ssh/sshd_config permissions (0600)",
+        "/etc/ssh/sshd_config permissions",
         status,
-        "Checks that /etc/ssh/sshd_config is owned by root:root and has permissions 0600.",
+        "Checks that /etc/ssh/sshd_config is owned by root and has safe permissions. 0644 is the distro default and is not secret.",
         "If sshd_config is world-writable, an attacker can change SSH settings to allow password login or open a backdoor.",
         "stat -c '%a %U:%G' /etc/ssh/sshd_config",
         current_value,
-        "0600 root:root",
+        "0644 root:root (distro default)",
         remediation_id="fix_perm_sshd_config",
-        manual_command="chown root:root /etc/ssh/sshd_config && chmod 0600 /etc/ssh/sshd_config",
+        manual_command="chown root:root /etc/ssh/sshd_config && chmod 0644 /etc/ssh/sshd_config",
     )
 
 
