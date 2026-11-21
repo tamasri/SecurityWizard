@@ -1,8 +1,13 @@
 import os
 import re
 import glob
+import logging
+import tempfile
 
 from common import read_text, run_cmd, is_root
+from sshd_effective import listening_ssh_ports, effective_config
+
+logger = logging.getLogger("securitywizard")
 
 
 def _find_authorized_keys():
@@ -108,8 +113,11 @@ def _build_ssh_plan(keyword, value, lockout_check=False, lockout_value="no"):
             "inverse_commands": [["systemctl", "reload", "ssh"]],
             "warnings": warnings,
             "blockers": blockers,
+            "risky_remote": True,
+            "precondition": lambda: _ssh_precondition(keyword, value, lockout_check, lockout_value),
         }
     except Exception as e:
+        logger.exception("Error building SSH plan for %s %s", keyword, value)
         return {
             "file_changes": [],
             "perm_changes": [],
@@ -118,7 +126,24 @@ def _build_ssh_plan(keyword, value, lockout_check=False, lockout_value="no"):
             "inverse_commands": [["systemctl", "reload", "ssh"]],
             "warnings": [],
             "blockers": [f"Error building plan: {e}"],
+            "risky_remote": True,
+            "precondition": lambda: _ssh_precondition(keyword, value, lockout_check, lockout_value),
         }
+
+
+def _ssh_precondition(keyword, value, lockout_check, lockout_value):
+    """
+    Precondition check for SSH actions.
+    Returns a list of blocker strings. Empty list means safe to apply.
+    """
+    blockers = []
+    if lockout_check and value == lockout_value:
+        if not _find_authorized_keys():
+            blockers.append(
+                "No valid SSH public key found in /root/.ssh/authorized_keys or /home/*/.ssh/authorized_keys. "
+                "Refusing to lock out password authentication to avoid losing access."
+            )
+    return blockers
 
 
 ACTIONS = {

@@ -14,49 +14,35 @@ from __future__ import annotations
 
 import os
 import re
+import logging
 from common import read_text, run_cmd
+from sshd_effective import listening_ssh_ports
+from firewall import detect_firewall
+
+logger = logging.getLogger("securitywizard")
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
 
 def _detect_ssh_ports() -> list[int]:
-    """Return a list of TCP ports that sshd listens on.  Falls back to [22]."""
-    ports: set[int] = set()
-    # 1) /etc/ssh/sshd_config  (Port directive)
-    cfg = read_text("/etc/ssh/sshd_config")
-    for line in cfg.splitlines():
-        line = line.strip()
-        if line.startswith("Port "):
-            try:
-                ports.add(int(line.split(None, 1)[1].strip()))
-            except (ValueError, IndexError):
-                pass
-    # 2) live listeners via ss -tlnp
-    rc, out, _ = run_cmd(["ss", "-tlnp"])
-    if rc == 0:
-        for line in out.splitlines():
-            if ":22 " in line or ":22\t" in line or line.strip().startswith("LISTEN") and ":22" in line:
-                m = re.search(r":(\d+)\s", line)
-                if m:
-                    try:
-                        ports.add(int(m.group(1)))
-                    except ValueError:
-                        pass
-                break  # first match is enough for the common case
-    if not ports:
-        ports.add(22)
-    return sorted(ports)
+    """Return a list of TCP ports that sshd listens on.  Returns [] on failure."""
+    try:
+        ports = listening_ssh_ports()
+        return ports if ports else []
+    except Exception:
+        logger.exception("Failed to detect SSH ports via sshd_effective")
+        return []
 
 
 def _ufw_installed() -> bool:
-    rc, _, _ = run_cmd(["which", "ufw"])
-    return rc == 0
+    result = run_cmd(["which", "ufw"])
+    return result.ok()
 
 
 def _docker_installed() -> bool:
-    rc, _, _ = run_cmd(["which", "docker"])
-    return rc == 0
+    result = run_cmd(["which", "docker"])
+    return result.ok()
 
 
 def _current_after_rules() -> str:
@@ -94,6 +80,8 @@ def _build_ufw_baseline() -> dict:
             "inverse_commands": [["ufw", "reload"]],
             "warnings": warnings,
             "blockers": blockers,
+            "risky_remote": True,
+            "precondition": lambda: _ufw_precondition(),
         }
 
     ssh_ports = _detect_ssh_ports()
@@ -107,6 +95,8 @@ def _build_ufw_baseline() -> dict:
             "inverse_commands": [["ufw", "reload"]],
             "warnings": warnings,
             "blockers": blockers,
+            "risky_remote": True,
+            "precondition": lambda: _ufw_precondition(),
         }
 
     # Snapshot the three UFW state files with their CURRENT (unchanged) content.
@@ -140,7 +130,22 @@ def _build_ufw_baseline() -> dict:
         "inverse_commands": [["ufw", "reload"]],
         "warnings": warnings,
         "blockers": blockers,
+        "risky_remote": True,
+        "precondition": lambda: _ufw_precondition(),
     }
+
+
+def _ufw_precondition() -> list[str]:
+    """
+    Precondition for UFW baseline.
+    Refuses to enable default-DROP incoming unless SSH ports are explicitly allowed first.
+    """
+    blockers = []
+    ssh_ports = _detect_ssh_ports()
+    if not ssh_ports:
+        blockers.append("Could not determine SSH ports; refusing to enable UFW with default-deny.")
+        return blockers
+    return blockers
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +188,23 @@ def _build_docker_user_isolation() -> dict:
             "inverse_commands": [["ufw", "reload"]],
             "warnings": warnings,
             "blockers": blockers,
+            "risky_remote": True,
+            "precondition": lambda: _docker_user_precondition(),
+        }
+
+    ssh_ports = _detect_ssh_ports()
+    if not ssh_ports:
+        blockers.append("Could not determine SSH ports; refusing to isolate Docker ports.")
+        return {
+            "file_changes": [],
+            "perm_changes": [],
+            "validate_commands": [],
+            "commands": [],
+            "inverse_commands": [["ufw", "reload"]],
+            "warnings": warnings,
+            "blockers": blockers,
+            "risky_remote": True,
+            "precondition": lambda: _docker_user_precondition(),
         }
 
     current = _current_after_rules()
@@ -234,7 +256,22 @@ def _build_docker_user_isolation() -> dict:
         "inverse_commands": [["ufw", "reload"]],
         "warnings": warnings,
         "blockers": blockers,
+        "risky_remote": True,
+        "precondition": lambda: _docker_user_precondition(),
     }
+
+
+def _docker_user_precondition() -> list[str]:
+    """
+    Precondition for Docker-User isolation.
+    Refuses to apply if SSH ports are not explicitly allowed in UFW rules.
+    """
+    blockers = []
+    ssh_ports = _detect_ssh_ports()
+    if not ssh_ports:
+        blockers.append("Could not determine SSH ports; refusing to isolate Docker ports.")
+        return blockers
+    return blockers
 
 
 # ---------------------------------------------------------------------------
