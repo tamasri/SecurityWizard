@@ -19,6 +19,11 @@ def _make_fake_module(monkeypatch, name, results, delay=0.0, crash=False):
     monkeypatch.setitem(sys.modules, name, mod)
 
 
+def _isolate_scanner(monkeypatch, modules):
+    """Replace scanner.MODULES with only the given modules to isolate the scan."""
+    monkeypatch.setattr(scanner, "MODULES", modules)
+
+
 def test_concurrent_execution_is_faster_than_sequential(monkeypatch):
     """Two slow checks should run in parallel, not sequentially."""
     # Each check takes 0.3s; sequential would be 0.6s, parallel should be < 0.5s
@@ -35,11 +40,10 @@ def test_concurrent_execution_is_faster_than_sequential(monkeypatch):
     _make_fake_module(monkeypatch, "checks_network", results_a, delay=0.3)
     _make_fake_module(monkeypatch, "checks_ssh", results_b, delay=0.3)
 
-    # Make other modules return empty lists quickly
-    for name in ["checks_kernel", "checks_privilege", "checks_docker", "checks_logs", "checks_misc"]:
-        empty_mod = type(sys)('fake_' + name)
-        empty_mod.run_checks = lambda: []
-        monkeypatch.setitem(sys.modules, name, empty_mod)
+    _isolate_scanner(monkeypatch, [
+        ("network", "checks_network"),
+        ("ssh", "checks_ssh"),
+    ])
 
     start = time.monotonic()
     result = scanner.run_full_scan()
@@ -59,11 +63,10 @@ def test_timeout_produces_skipped(monkeypatch):
     mod = type(sys)('fake_network')
     mod.run_checks = slow_run_checks
     monkeypatch.setitem(sys.modules, "checks_network", mod)
-    # Other modules return empty quickly
-    for name in ["checks_ssh", "checks_kernel", "checks_privilege", "checks_docker", "checks_logs", "checks_misc"]:
-        empty_mod = type(sys)('fake_' + name)
-        empty_mod.run_checks = lambda: []
-        monkeypatch.setitem(sys.modules, name, empty_mod)
+
+    _isolate_scanner(monkeypatch, [
+        ("network", "checks_network"),
+    ])
 
     monkeypatch.setenv("SECURITYWIZARD_CHECK_TIMEOUT", "0.2")
     monkeypatch.setenv("SECURITYWIZARD_WORKERS", "4")
@@ -91,10 +94,11 @@ def test_stable_order(monkeypatch):
     ]
     _make_fake_module(monkeypatch, "checks_network", results_network, delay=0.1)
     _make_fake_module(monkeypatch, "checks_ssh", results_ssh, delay=0.0)
-    for name in ["checks_kernel", "checks_privilege", "checks_docker", "checks_logs", "checks_misc"]:
-        empty_mod = type(sys)('fake_' + name)
-        empty_mod.run_checks = lambda: []
-        monkeypatch.setitem(sys.modules, name, empty_mod)
+
+    _isolate_scanner(monkeypatch, [
+        ("network", "checks_network"),
+        ("ssh", "checks_ssh"),
+    ])
 
     result = scanner.run_full_scan()
     ids = [c["id"] for c in result["checks"]]
@@ -117,10 +121,11 @@ def test_crashing_check_does_not_abort_scan(monkeypatch):
          "recommended_value": "", "details": [], "remediation_id": None, "manual_command": ""}
     ]
     _make_fake_module(monkeypatch, "checks_network", results_network)
-    for name in ["checks_ssh", "checks_privilege", "checks_docker", "checks_logs", "checks_misc"]:
-        empty_mod = type(sys)('fake_' + name)
-        empty_mod.run_checks = lambda: []
-        monkeypatch.setitem(sys.modules, name, empty_mod)
+
+    _isolate_scanner(monkeypatch, [
+        ("network", "checks_network"),
+        ("kernel", "checks_kernel"),
+    ])
 
     result = scanner.run_full_scan()
     # The crashing kernel module should produce a SKIPPED check
