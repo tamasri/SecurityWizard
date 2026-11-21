@@ -1,14 +1,17 @@
+import concurrent.futures
 import importlib
 import logging
 import os
-import traceback
-import concurrent.futures
 from datetime import datetime, timezone
 from typing import List, Optional
 
 from common import (
-    STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED,
-    make_check, skipped_check,
+    STATUS_CRITICAL,
+    STATUS_INFO,
+    STATUS_PASS,
+    STATUS_SKIPPED,
+    STATUS_WARNING,
+    skipped_check,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,15 +50,17 @@ def _run_module(category: str, module_name: str) -> List[dict]:
     except Exception as exc:
         logger.exception("Unexpected error in %s module", module_name)
         reason = "{}: {}".format(type(exc).__name__, exc)
-        return [skipped_check(
-            id="SCN-" + category,
-            category=category,
-            title="Module error",
-            what_it_checks="Failed to load the " + category + " checks module.",
-            risk="The " + category + " checks could not be evaluated.",
-            command=module_name,
-            reason=reason,
-        )]
+        return [
+            skipped_check(
+                id="SCN-" + category,
+                category=category,
+                title="Module error",
+                what_it_checks="Failed to load the " + category + " checks module.",
+                risk="The " + category + " checks could not be evaluated.",
+                command=module_name,
+                reason=reason,
+            )
+        ]
 
 
 def _run_module_with_timeout(category: str, module_name: str, timeout: float) -> List[dict]:
@@ -70,32 +75,36 @@ def _run_module_with_timeout(category: str, module_name: str, timeout: float) ->
             return future.result(timeout=timeout)
     except concurrent.futures.TimeoutError:
         logger.warning("Module %s timed out after %.1fs", module_name, timeout)
-        return [skipped_check(
-            id="SCN-" + category,
-            category=category,
-            title="Timed out",
-            what_it_checks="The " + category + " checks did not finish in time.",
-            risk="The " + category + " checks could not be evaluated within the time limit.",
-            command=module_name,
-            reason="timed out after {:.1f} s".format(timeout),
-        )]
+        return [
+            skipped_check(
+                id="SCN-" + category,
+                category=category,
+                title="Timed out",
+                what_it_checks="The " + category + " checks did not finish in time.",
+                risk="The " + category + " checks could not be evaluated within the time limit.",
+                command=module_name,
+                reason="timed out after {:.1f} s".format(timeout),
+            )
+        ]
     except Exception as exc:
         logger.exception("Unexpected error in %s module", module_name)
         reason = "{}: {}".format(type(exc).__name__, exc)
-        return [skipped_check(
-            id="SCN-" + category,
-            category=category,
-            title="Module error",
-            what_it_checks="Failed to load the " + category + " checks module.",
-            risk="The " + category + " checks could not be evaluated.",
-            command=module_name,
-            reason=reason,
-        )]
+        return [
+            skipped_check(
+                id="SCN-" + category,
+                category=category,
+                title="Module error",
+                what_it_checks="Failed to load the " + category + " checks module.",
+                risk="The " + category + " checks could not be evaluated.",
+                command=module_name,
+                reason=reason,
+            )
+        ]
 
 
 def compute_score(checks: List[dict]) -> dict:
     """Compute the security score from a list of check result dicts.
-    
+
     Returns a dict with 'score' (int or None), 'counts', 'excluded', 'formula', 'weights'.
     """
     counts = {STATUS_PASS: 0, STATUS_WARNING: 0, STATUS_CRITICAL: 0, STATUS_INFO: 0, STATUS_SKIPPED: 0}
@@ -103,10 +112,10 @@ def compute_score(checks: List[dict]) -> dict:
         st = c.get("status", STATUS_SKIPPED)
         if st in counts:
             counts[st] += 1
-    
+
     excluded = counts[STATUS_SKIPPED] + counts[STATUS_INFO]
     denom = counts[STATUS_PASS] + counts[STATUS_WARNING] + counts[STATUS_CRITICAL]
-    
+
     not_scanned = denom == 0
     if not_scanned:
         score = None
@@ -114,27 +123,51 @@ def compute_score(checks: List[dict]) -> dict:
     else:
         score = round(100 * (counts[STATUS_PASS] + 0.5 * counts[STATUS_WARNING]) / denom)
         formula = f"100 * ({counts[STATUS_PASS]} PASS + 0.5 * {counts[STATUS_WARNING]} WARNING) / {denom} = {score}%"
-    
+
     result = {
         "score": score,
         "counts": counts,
         "excluded": excluded,
         "formula": formula,
-        "weights": {
-            "PASS": 1.0,
-            "WARNING": 0.5,
-            "CRITICAL": 0.0,
-            "INFO": "excluded",
-            "SKIPPED": "excluded"
-        }
+        "weights": {"PASS": 1.0, "WARNING": 0.5, "CRITICAL": 0.0, "INFO": "excluded", "SKIPPED": "excluded"},
     }
     if not_scanned:
         result["not_scanned"] = True
     return result
 
 
+def apply_accepted_risks(checks: List[dict]) -> int:
+    """Downgrade WARNING/CRITICAL checks that the user accepted in the configuration to INFO.
+
+    The original status and the stated reason are kept on the check (``accepted_risk``), expired entries are
+    ignored, and a broken configuration never stops a scan. Returns the number of accepted checks.
+    """
+    try:
+        from config import get_config
+
+        cfg = get_config()
+    except Exception:
+        logger.exception("Configuration could not be loaded; accepted risks are not applied")
+        return 0
+    accepted = 0
+    for check in checks:
+        if check.get("status") not in (STATUS_WARNING, STATUS_CRITICAL):
+            continue
+        evidence = " ".join([str(check.get("current_value", ""))] + [str(d) for d in check.get("details", [])])
+        entry = cfg.is_accepted(check.get("id", ""), evidence)
+        if entry is None:
+            continue
+        check["accepted_risk"] = {
+            "reason": entry.reason,
+            "expires": entry.expires,
+            "original_status": check["status"],
+        }
+        check["status"] = STATUS_INFO
+        accepted += 1
+    return accepted
+
+
 def _build_result(start_iso, checks):
-    import os
     dry_run_only = os.environ.get("SECURITYWIZARD_DRY_RUN_ONLY", "0") == "1"
     for c in checks:
         rid = c.get("remediation_id")
@@ -142,6 +175,7 @@ def _build_result(start_iso, checks):
             c["fix_state"] = "dry_run_only" if dry_run_only else "available"
         else:
             c["fix_state"] = "none"
+    apply_accepted_risks(checks)
     score_info = compute_score(checks)
     return {
         "started": start_iso,
@@ -176,15 +210,17 @@ def run_full_scan(progress_cb=None):
                 logger.exception("Unexpected error collecting result for module at index %d", idx)
                 category, module_name = MODULES[idx]
                 reason = "{}: {}".format(type(exc).__name__, exc)
-                module_results[idx] = [skipped_check(
-                    id="SCN-" + category,
-                    category=category,
-                    title="Module error",
-                    what_it_checks="Failed to load the " + category + " checks module.",
-                    risk="The " + category + " checks could not be evaluated.",
-                    command=module_name,
-                    reason=reason,
-                )]
+                module_results[idx] = [
+                    skipped_check(
+                        id="SCN-" + category,
+                        category=category,
+                        title="Module error",
+                        what_it_checks="Failed to load the " + category + " checks module.",
+                        risk="The " + category + " checks could not be evaluated.",
+                        command=module_name,
+                        reason=reason,
+                    )
+                ]
             if progress_cb is not None:
                 # Report progress in module order, not completion order
                 done_count = sum(1 for r in module_results if r is not None)
@@ -205,13 +241,15 @@ def run_category_scan(category):
             checks.extend(_run_module(cat, module_name))
             break
     else:
-        checks.append(skipped_check(
-            id="SCN-" + category,
-            category=category,
-            title="Unknown category",
-            what_it_checks="The requested category was not found.",
-            risk="No checks were run for this category.",
-            command=category,
-            reason="Unknown category: " + str(category),
-        ))
+        checks.append(
+            skipped_check(
+                id="SCN-" + category,
+                category=category,
+                title="Unknown category",
+                what_it_checks="The requested category was not found.",
+                risk="No checks were run for this category.",
+                command=category,
+                reason="Unknown category: " + str(category),
+            )
+        )
     return _build_result(start_iso, checks)

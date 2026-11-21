@@ -1,11 +1,11 @@
 """Export scan results to JSON, Markdown, SARIF, and HTML formats."""
 
 import json
-
-from history import scan_counts, scan_score, scan_timestamp
 import logging
 from html import escape
 from typing import Any, Dict, List
+
+from history import scan_counts, scan_score, scan_timestamp
 
 logger = logging.getLogger("securitywizard")
 
@@ -93,25 +93,27 @@ def to_sarif(result: Dict[str, Any]) -> str:
             evidence_parts.append(f"Current: {check['current_value']}")
         if check.get("recommended_value"):
             evidence_parts.append(f"Recommended: {check['recommended_value']}")
-        for d in (check.get("details") or []):
+        for d in check.get("details") or []:
             evidence_parts.append(str(d))
         message_text = "; ".join(evidence_parts) if evidence_parts else check.get("what_it_checks", "")
-        sarif_results.append({
-            "ruleId": rule_id,
-            "level": level,
-            "message": {
-                "text": message_text,
-            },
-            "locations": [
-                {
-                    "physicalLocation": {
-                        "artifactLocation": {
-                            "uri": "server",
+        sarif_results.append(
+            {
+                "ruleId": rule_id,
+                "level": level,
+                "message": {
+                    "text": message_text,
+                },
+                "locations": [
+                    {
+                        "physicalLocation": {
+                            "artifactLocation": {
+                                "uri": "server",
+                            },
                         },
-                    },
-                }
-            ],
-        })
+                    }
+                ],
+            }
+        )
 
     sarif = {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
@@ -164,7 +166,7 @@ def to_html(result: Dict[str, Any]) -> str:
             items = "".join(f"<li>{esc(d)}</li>" for d in details)
             details_html = f"<ul>{items}</ul>"
         rows.append(
-            f"<tr class=\"{status_class}\">"
+            f'<tr class="{status_class}">'
             f"<td>{esc(check.get('id', ''))}</td>"
             f"<td>{esc(check.get('category', ''))}</td>"
             f"<td>{esc(status)}</td>"
@@ -200,9 +202,9 @@ ul {{ margin: 0; padding-left: 1.2rem; }}
 <body>
 <h1>SecurityWizard Scan Report</h1>
 <div class="meta">
-<p><strong>Scan ID:</strong> {esc(result.get('scan_id', 'N/A'))}</p>
-<p><strong>Timestamp:</strong> {esc(scan_timestamp(result) or 'N/A')}</p>
-<p><strong>Score:</strong> {esc('not scored' if total is None else str(total) + '/100')}</p>
+<p><strong>Scan ID:</strong> {esc(result.get("scan_id", "N/A"))}</p>
+<p><strong>Timestamp:</strong> {esc(scan_timestamp(result) or "N/A")}</p>
+<p><strong>Score:</strong> {esc("not scored" if total is None else str(total) + "/100")}</p>
 <p><strong>Status counts:</strong> {counts_html}</p>
 </div>
 <table>
@@ -210,7 +212,7 @@ ul {{ margin: 0; padding-left: 1.2rem; }}
 <tr><th>ID</th><th>Category</th><th>Status</th><th>Title</th><th>Current</th><th>Recommended</th><th>Details</th></tr>
 </thead>
 <tbody>
-{''.join(rows)}
+{"".join(rows)}
 </tbody>
 </table>
 </body>

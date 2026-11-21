@@ -1,13 +1,20 @@
 """SSH daemon security & access hardening checks."""
 
-from common import (
-    STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED,
-    run_cmd, read_text, is_root, make_check, skipped_check,
-)
-from sshd_effective import listening_ssh_ports, evaluate_ssh_security, effective_config
-
-import os
 import glob
+import os
+
+from common import (
+    STATUS_CRITICAL,
+    STATUS_INFO,
+    STATUS_PASS,
+    STATUS_WARNING,
+    is_root,
+    make_check,
+    read_text,
+    run_cmd,
+    skipped_check,
+)
+from sshd_effective import evaluate_ssh_security, listening_ssh_ports
 
 SUPPORTED = ["network", "ssh", "kernel", "privilege", "docker", "logs"]
 CATEGORY = "ssh"
@@ -105,7 +112,9 @@ def _check_sshd_installed():
 def _check_permit_root_login():
     if not _check_sshd_installed():
         return skipped_check(
-            "SSH-001", CATEGORY, "PermitRootLogin (target: no or prohibit-password)",
+            "SSH-001",
+            CATEGORY,
+            "PermitRootLogin (target: no or prohibit-password)",
             "Whether the sshd daemon allows direct root login via SSH.",
             "An attacker who guesses the root password gains immediate full control of the server.",
             "sshd -T | grep permitrootlogin",
@@ -115,7 +124,9 @@ def _check_permit_root_login():
     ports = listening_ssh_ports()
     if not ports:
         return skipped_check(
-            "SSH-001", CATEGORY, "PermitRootLogin (target: no or prohibit-password)",
+            "SSH-001",
+            CATEGORY,
+            "PermitRootLogin (target: no or prohibit-password)",
             "Whether the sshd daemon allows direct root login via SSH.",
             "An attacker who guesses the root password gains immediate full control of the server.",
             "sshd -T | grep permitrootlogin",
@@ -128,7 +139,9 @@ def _check_permit_root_login():
         result = evaluate_ssh_security(port=port)
         if result["status"] == "SKIPPED":
             return skipped_check(
-                "SSH-001", CATEGORY, "PermitRootLogin (target: no or prohibit-password)",
+                "SSH-001",
+                CATEGORY,
+                "PermitRootLogin (target: no or prohibit-password)",
                 "Whether the sshd daemon allows direct root login via SSH.",
                 "An attacker who guesses the root password gains immediate full control of the server.",
                 "sshd -T | grep permitrootlogin",
@@ -147,7 +160,9 @@ def _check_permit_root_login():
                     status = STATUS_PASS
                 details.append(f"Port {port}: PermitRootLogin={val} ({status})")
     return make_check(
-        "SSH-001", CATEGORY, "PermitRootLogin (target: no or prohibit-password)",
+        "SSH-001",
+        CATEGORY,
+        "PermitRootLogin (target: no or prohibit-password)",
         worst_status,
         "Checks whether the SSH daemon permits direct login as the root user. "
         "The recommended setting is 'no' or 'prohibit-password' so that root can only log in with a key.",
@@ -165,7 +180,9 @@ def _check_permit_root_login():
 def _check_password_auth():
     if not _check_sshd_installed():
         return skipped_check(
-            "SSH-002", CATEGORY, "PasswordAuthentication (target: no)",
+            "SSH-002",
+            CATEGORY,
+            "PasswordAuthentication (target: no)",
             "Whether SSH password authentication is enabled.",
             "With password auth on, attackers can brute-force passwords; keys are much harder to crack.",
             "sshd -T | grep passwordauthentication",
@@ -175,7 +192,9 @@ def _check_password_auth():
     ports = listening_ssh_ports()
     if not ports:
         return skipped_check(
-            "SSH-002", CATEGORY, "PasswordAuthentication (target: no)",
+            "SSH-002",
+            CATEGORY,
+            "PasswordAuthentication (target: no)",
             "Whether SSH password authentication is enabled.",
             "With password auth on, attackers can brute-force passwords; keys are much harder to crack.",
             "sshd -T | grep passwordauthentication",
@@ -188,7 +207,9 @@ def _check_password_auth():
         result = evaluate_ssh_security(port=port)
         if result["status"] == "SKIPPED":
             return skipped_check(
-                "SSH-002", CATEGORY, "PasswordAuthentication (target: no)",
+                "SSH-002",
+                CATEGORY,
+                "PasswordAuthentication (target: no)",
                 "Whether SSH password authentication is enabled.",
                 "With password auth on, attackers can brute-force passwords; keys are much harder to crack.",
                 "sshd -T | grep passwordauthentication",
@@ -207,7 +228,9 @@ def _check_password_auth():
                     status = STATUS_INFO
                 details.append(f"Port {port}: PasswordAuthentication={val} ({status})")
     return make_check(
-        "SSH-002", CATEGORY, "PasswordAuthentication (target: no)",
+        "SSH-002",
+        CATEGORY,
+        "PasswordAuthentication (target: no)",
         worst_status,
         "Checks whether SSH accepts password-based logins. Disabling it forces users to use public-key authentication.",
         "Password authentication exposes the server to brute-force and credential-stuffing attacks, "
@@ -224,7 +247,9 @@ def _check_password_auth():
 def _check_pubkey_auth():
     if not _check_sshd_installed():
         return skipped_check(
-            "SSH-003", CATEGORY, "PubkeyAuthentication (target: yes)",
+            "SSH-003",
+            CATEGORY,
+            "PubkeyAuthentication (target: yes)",
             "Whether SSH public-key authentication is enabled.",
             "Without key auth, users must rely on passwords, which are easier to steal or guess.",
             "sshd -T | grep pubkeyauthentication",
@@ -234,7 +259,9 @@ def _check_pubkey_auth():
     ports = listening_ssh_ports()
     if not ports:
         return skipped_check(
-            "SSH-003", CATEGORY, "PubkeyAuthentication (target: yes)",
+            "SSH-003",
+            CATEGORY,
+            "PubkeyAuthentication (target: yes)",
             "Whether SSH public-key authentication is enabled.",
             "Without key auth, users must rely on passwords, which are easier to steal or guess.",
             "sshd -T | grep pubkeyauthentication",
@@ -247,7 +274,9 @@ def _check_pubkey_auth():
         result = evaluate_ssh_security(port=port)
         if result["status"] == "SKIPPED":
             return skipped_check(
-                "SSH-003", CATEGORY, "PubkeyAuthentication (target: yes)",
+                "SSH-003",
+                CATEGORY,
+                "PubkeyAuthentication (target: yes)",
                 "Whether SSH public-key authentication is enabled.",
                 "Without key auth, users must rely on passwords, which are easier to steal or guess.",
                 "sshd -T | grep pubkeyauthentication",
@@ -266,7 +295,9 @@ def _check_pubkey_auth():
                     status = STATUS_INFO
                 details.append(f"Port {port}: PubkeyAuthentication={val} ({status})")
     return make_check(
-        "SSH-003", CATEGORY, "PubkeyAuthentication (target: yes)",
+        "SSH-003",
+        CATEGORY,
+        "PubkeyAuthentication (target: yes)",
         worst_status,
         "Checks whether SSH accepts public-key logins. This is the preferred authentication method for servers.",
         "If key authentication is disabled, every login depends on a password, making the server "
@@ -283,7 +314,9 @@ def _check_pubkey_auth():
 def _check_max_auth_tries():
     if not _check_sshd_installed():
         return skipped_check(
-            "SSH-004", CATEGORY, "MaxAuthTries (target: <= 3)",
+            "SSH-004",
+            CATEGORY,
+            "MaxAuthTries (target: <= 3)",
             "The maximum number of authentication attempts per SSH connection.",
             "A high limit lets attackers try many passwords or keys before being cut off, increasing brute-force success.",
             "sshd -T | grep maxauthtries",
@@ -293,7 +326,9 @@ def _check_max_auth_tries():
     ports = listening_ssh_ports()
     if not ports:
         return skipped_check(
-            "SSH-004", CATEGORY, "MaxAuthTries (target: <= 3)",
+            "SSH-004",
+            CATEGORY,
+            "MaxAuthTries (target: <= 3)",
             "The maximum number of authentication attempts per SSH connection.",
             "A high limit lets attackers try many passwords or keys before being cut off, increasing brute-force success.",
             "sshd -T | grep maxauthtries",
@@ -306,7 +341,9 @@ def _check_max_auth_tries():
         result = evaluate_ssh_security(port=port)
         if result["status"] == "SKIPPED":
             return skipped_check(
-                "SSH-004", CATEGORY, "MaxAuthTries (target: <= 3)",
+                "SSH-004",
+                CATEGORY,
+                "MaxAuthTries (target: <= 3)",
                 "The maximum number of authentication attempts per SSH connection.",
                 "A high limit lets attackers try many passwords or keys before being cut off, increasing brute-force success.",
                 "sshd -T | grep maxauthtries",
@@ -330,7 +367,9 @@ def _check_max_auth_tries():
                     status = STATUS_INFO
                 details.append(f"Port {port}: MaxAuthTries={val} ({status})")
     return make_check(
-        "SSH-004", CATEGORY, "MaxAuthTries (target: <= 3)",
+        "SSH-004",
+        CATEGORY,
+        "MaxAuthTries (target: <= 3)",
         worst_status,
         "Checks the maximum number of authentication attempts allowed on a single SSH connection. "
         "Lowering this reduces the window for brute-force attacks.",
@@ -348,7 +387,9 @@ def _check_max_auth_tries():
 def _check_empty_passwords():
     if not _check_sshd_installed():
         return skipped_check(
-            "SSH-005", CATEGORY, "PermitEmptyPasswords (target: no)",
+            "SSH-005",
+            CATEGORY,
+            "PermitEmptyPasswords (target: no)",
             "Whether SSH allows login with an empty (blank) password.",
             "If empty passwords are permitted, any account with no password set can be accessed by anyone over SSH.",
             "sshd -T | grep permitemptypasswords",
@@ -358,7 +399,9 @@ def _check_empty_passwords():
     ports = listening_ssh_ports()
     if not ports:
         return skipped_check(
-            "SSH-005", CATEGORY, "PermitEmptyPasswords (target: no)",
+            "SSH-005",
+            CATEGORY,
+            "PermitEmptyPasswords (target: no)",
             "Whether SSH allows login with an empty (blank) password.",
             "If empty passwords are permitted, any account with no password set can be accessed by anyone over SSH.",
             "sshd -T | grep permitemptypasswords",
@@ -371,7 +414,9 @@ def _check_empty_passwords():
         result = evaluate_ssh_security(port=port)
         if result["status"] == "SKIPPED":
             return skipped_check(
-                "SSH-005", CATEGORY, "PermitEmptyPasswords (target: no)",
+                "SSH-005",
+                CATEGORY,
+                "PermitEmptyPasswords (target: no)",
                 "Whether SSH allows login with an empty (blank) password.",
                 "If empty passwords are permitted, any account with no password set can be accessed by anyone over SSH.",
                 "sshd -T | grep permitemptypasswords",
@@ -390,7 +435,9 @@ def _check_empty_passwords():
                     status = STATUS_INFO
                 details.append(f"Port {port}: PermitEmptyPasswords={val} ({status})")
     return make_check(
-        "SSH-005", CATEGORY, "PermitEmptyPasswords (target: no)",
+        "SSH-005",
+        CATEGORY,
+        "PermitEmptyPasswords (target: no)",
         worst_status,
         "Checks whether SSH permits logins with an empty password. This should always be disabled.",
         "If empty passwords are allowed, any user account without a password (e.g., a newly created service account) "
@@ -407,7 +454,9 @@ def _check_empty_passwords():
 def _check_x11_forwarding():
     if not _check_sshd_installed():
         return skipped_check(
-            "SSH-006", CATEGORY, "X11Forwarding (target: no)",
+            "SSH-006",
+            CATEGORY,
+            "X11Forwarding (target: no)",
             "Whether SSH X11 forwarding is enabled.",
             "X11 forwarding opens a channel for graphical apps; if left on, a compromised X server can leak input or screen data.",
             "sshd -T | grep x11forwarding",
@@ -417,7 +466,9 @@ def _check_x11_forwarding():
     ports = listening_ssh_ports()
     if not ports:
         return skipped_check(
-            "SSH-006", CATEGORY, "X11Forwarding (target: no)",
+            "SSH-006",
+            CATEGORY,
+            "X11Forwarding (target: no)",
             "Whether SSH X11 forwarding is enabled.",
             "X11 forwarding opens a channel for graphical apps; if left on, a compromised X server can leak input or screen data.",
             "sshd -T | grep x11forwarding",
@@ -430,7 +481,9 @@ def _check_x11_forwarding():
         result = evaluate_ssh_security(port=port)
         if result["status"] == "SKIPPED":
             return skipped_check(
-                "SSH-006", CATEGORY, "X11Forwarding (target: no)",
+                "SSH-006",
+                CATEGORY,
+                "X11Forwarding (target: no)",
                 "Whether SSH X11 forwarding is enabled.",
                 "X11 forwarding opens a channel for graphical apps; if left on, a compromised X server can leak input or screen data.",
                 "sshd -T | grep x11forwarding",
@@ -449,7 +502,9 @@ def _check_x11_forwarding():
                     status = STATUS_INFO
                 details.append(f"Port {port}: X11Forwarding={val} ({status})")
     return make_check(
-        "SSH-006", CATEGORY, "X11Forwarding (target: no)",
+        "SSH-006",
+        CATEGORY,
+        "X11Forwarding (target: no)",
         worst_status,
         "Checks whether SSH X11 forwarding is enabled. It is rarely needed on headless servers and expands the attack surface.",
         "With X11 forwarding on, a malicious or compromised X application on the client can interact with the server's X server, "
@@ -465,17 +520,26 @@ def _check_x11_forwarding():
 
 def run_checks():
     results = []
-    for fn in (_check_permit_root_login, _check_password_auth, _check_pubkey_auth,
-               _check_max_auth_tries, _check_empty_passwords, _check_x11_forwarding):
+    for fn in (
+        _check_permit_root_login,
+        _check_password_auth,
+        _check_pubkey_auth,
+        _check_max_auth_tries,
+        _check_empty_passwords,
+        _check_x11_forwarding,
+    ):
         try:
             results.append(fn())
         except Exception:
-            results.append(skipped_check(
-                fn.__name__.replace("_check_", "").upper(),
-                CATEGORY, fn.__doc__ or fn.__name__,
-                "An internal error occurred while evaluating this SSH check.",
-                "The check could not be completed due to an unexpected error.",
-                "internal",
-                "unexpected exception",
-            ))
+            results.append(
+                skipped_check(
+                    fn.__name__.replace("_check_", "").upper(),
+                    CATEGORY,
+                    fn.__doc__ or fn.__name__,
+                    "An internal error occurred while evaluating this SSH check.",
+                    "The check could not be completed due to an unexpected error.",
+                    "internal",
+                    "unexpected exception",
+                )
+            )
     return results

@@ -1,32 +1,37 @@
 """Tests for envdetect.detect_environment and helper predicates."""
 
 import pytest
+
+from common import CmdResult
 from envdetect import (
     Environment,
     FakeFS,
     FakeRunner,
     detect_environment,
-    reset_environment_cache,
     is_container_host,
-    is_multi_homed,
+    reset_environment_cache,
 )
-from common import CmdResult
 
 
 class DictFS(FakeFS):
     """FakeFS backed by a dict of path -> content."""
+
     def __init__(self, files: dict):
         self._files = files
+
     def path_exists(self, path: str) -> bool:
         return path in self._files
+
     def read_text(self, path: str, default: str = "") -> str:
         return self._files.get(path, default)
 
 
 class ScriptedRunner(FakeRunner):
     """FakeRunner that returns canned CmdResult objects per command prefix."""
+
     def __init__(self, responses: dict):
         self._responses = responses
+
     def run(self, args, timeout=20.0):
         key = " ".join(args)
         for prefix, result in self._responses.items():
@@ -43,32 +48,37 @@ def _reset_cache():
 
 
 def _os_release_content(os_id: str, version: str) -> str:
-    return f'ID={os_id}\nVERSION_ID={version}\n'
+    return f"ID={os_id}\nVERSION_ID={version}\n"
 
 
 # ---------------------------------------------------------------------------
 # Plain Debian 12
 # ---------------------------------------------------------------------------
 
+
 def test_plain_debian_12():
-    fs = DictFS({
-        "/etc/os-release": _os_release_content("debian", "12"),
-    })
-    runner = ScriptedRunner({
-        "docker --version": CmdResult(127, "", "not found", not_found=True),
-        "docker ps -q": CmdResult(127, "", "not found", not_found=True),
-        "docker ps -a --filter label=coolify -q": CmdResult(127, "", "not found", not_found=True),
-        "systemctl is-active kubelet": CmdResult(3, "inactive\n", ""),
-        "wg show": CmdResult(1, "", "no devices"),
-        "systemctl is-active fail2ban": CmdResult(3, "inactive\n", ""),
-        "pgrep -x fail2ban-server": CmdResult(1, "", ""),
-        "systemctl is-active crowdsec": CmdResult(3, "inactive\n", ""),
-        "pgrep -x csd": CmdResult(1, "", ""),
-        "systemctl is-active auditd": CmdResult(3, "inactive\n", ""),
-        "pgrep -x auditd": CmdResult(1, "", ""),
-        "aa-status": CmdResult(127, "", "not found", not_found=True),
-        "getenforce": CmdResult(127, "", "not found", not_found=True),
-    })
+    fs = DictFS(
+        {
+            "/etc/os-release": _os_release_content("debian", "12"),
+        }
+    )
+    runner = ScriptedRunner(
+        {
+            "docker --version": CmdResult(127, "", "not found", not_found=True),
+            "docker ps -q": CmdResult(127, "", "not found", not_found=True),
+            "docker ps -a --filter label=coolify -q": CmdResult(127, "", "not found", not_found=True),
+            "systemctl is-active kubelet": CmdResult(3, "inactive\n", ""),
+            "wg show": CmdResult(1, "", "no devices"),
+            "systemctl is-active fail2ban": CmdResult(3, "inactive\n", ""),
+            "pgrep -x fail2ban-server": CmdResult(1, "", ""),
+            "systemctl is-active crowdsec": CmdResult(3, "inactive\n", ""),
+            "pgrep -x csd": CmdResult(1, "", ""),
+            "systemctl is-active auditd": CmdResult(3, "inactive\n", ""),
+            "pgrep -x auditd": CmdResult(1, "", ""),
+            "aa-status": CmdResult(127, "", "not found", not_found=True),
+            "getenforce": CmdResult(127, "", "not found", not_found=True),
+        }
+    )
     env = detect_environment(fs=fs, runner=runner)
     assert env.os_id == "debian"
     assert env.os_version == "12"
@@ -91,31 +101,36 @@ def test_plain_debian_12():
 # Ubuntu 24.04 Oracle ARM64 Coolify host
 # ---------------------------------------------------------------------------
 
+
 def test_ubuntu_2404_oracle_arm64_coolify():
-    fs = DictFS({
-        "/etc/os-release": _os_release_content("ubuntu", "24.04"),
-        "/var/run/docker.sock": "",
-        "/data/coolify": "",
-        "/sys/class/dmi/id/sys_vendor": "Oracle Corporation\n",
-        "/sys/class/dmi/id/product_name": "Oracle Cloud\n",
-        "/sys/class/dmi/id/chassis_asset_tag": "OCP-12345\n",
-        "/sys/module/apparmor": "",
-    })
-    runner = ScriptedRunner({
-        "docker --version": CmdResult(0, "Docker version 26.0.1, build 8633ee1\n", ""),
-        "docker ps -q": CmdResult(0, "abc123\ndef456\nghi789\n", ""),
-        "docker ps -a --filter label=coolify -q": CmdResult(0, "abc123\ndef456\n", ""),
-        "systemctl is-active kubelet": CmdResult(3, "inactive\n", ""),
-        "wg show": CmdResult(1, "", "no devices"),
-        "systemctl is-active fail2ban": CmdResult(0, "active\n", ""),
-        "pgrep -x fail2ban-server": CmdResult(0, "1234\n", ""),
-        "systemctl is-active crowdsec": CmdResult(0, "active\n", ""),
-        "pgrep -x csd": CmdResult(0, "5678\n", ""),
-        "systemctl is-active auditd": CmdResult(3, "inactive\n", ""),
-        "pgrep -x auditd": CmdResult(1, "", ""),
-        "aa-status": CmdResult(0, "apparmor is active.\n", ""),
-        "getenforce": CmdResult(127, "", "not found", not_found=True),
-    })
+    fs = DictFS(
+        {
+            "/etc/os-release": _os_release_content("ubuntu", "24.04"),
+            "/var/run/docker.sock": "",
+            "/data/coolify": "",
+            "/sys/class/dmi/id/sys_vendor": "Oracle Corporation\n",
+            "/sys/class/dmi/id/product_name": "Oracle Cloud\n",
+            "/sys/class/dmi/id/chassis_asset_tag": "OCP-12345\n",
+            "/sys/module/apparmor": "",
+        }
+    )
+    runner = ScriptedRunner(
+        {
+            "docker --version": CmdResult(0, "Docker version 26.0.1, build 8633ee1\n", ""),
+            "docker ps -q": CmdResult(0, "abc123\ndef456\nghi789\n", ""),
+            "docker ps -a --filter label=coolify -q": CmdResult(0, "abc123\ndef456\n", ""),
+            "systemctl is-active kubelet": CmdResult(3, "inactive\n", ""),
+            "wg show": CmdResult(1, "", "no devices"),
+            "systemctl is-active fail2ban": CmdResult(0, "active\n", ""),
+            "pgrep -x fail2ban-server": CmdResult(0, "1234\n", ""),
+            "systemctl is-active crowdsec": CmdResult(0, "active\n", ""),
+            "pgrep -x csd": CmdResult(0, "5678\n", ""),
+            "systemctl is-active auditd": CmdResult(3, "inactive\n", ""),
+            "pgrep -x auditd": CmdResult(1, "", ""),
+            "aa-status": CmdResult(0, "apparmor is active.\n", ""),
+            "getenforce": CmdResult(127, "", "not found", not_found=True),
+        }
+    )
     env = detect_environment(fs=fs, runner=runner)
     assert env.os_id == "ubuntu"
     assert env.os_version == "24.04"
@@ -139,28 +154,33 @@ def test_ubuntu_2404_oracle_arm64_coolify():
 # GCP VM
 # ---------------------------------------------------------------------------
 
+
 def test_gcp_vm():
-    fs = DictFS({
-        "/etc/os-release": _os_release_content("ubuntu", "24.04"),
-        "/sys/class/dmi/id/sys_vendor": "Google\n",
-        "/sys/class/dmi/id/product_name": "Google Compute Engine\n",
-        "/sys/class/dmi/id/chassis_asset_tag": "gcp-xyz\n",
-    })
-    runner = ScriptedRunner({
-        "docker --version": CmdResult(127, "", "not found", not_found=True),
-        "docker ps -q": CmdResult(127, "", "not found", not_found=True),
-        "docker ps -a --filter label=coolify -q": CmdResult(127, "", "not found", not_found=True),
-        "systemctl is-active kubelet": CmdResult(3, "inactive\n", ""),
-        "wg show": CmdResult(1, "", "no devices"),
-        "systemctl is-active fail2ban": CmdResult(3, "inactive\n", ""),
-        "pgrep -x fail2ban-server": CmdResult(1, "", ""),
-        "systemctl is-active crowdsec": CmdResult(3, "inactive\n", ""),
-        "pgrep -x csd": CmdResult(1, "", ""),
-        "systemctl is-active auditd": CmdResult(3, "inactive\n", ""),
-        "pgrep -x auditd": CmdResult(1, "", ""),
-        "aa-status": CmdResult(127, "", "not found", not_found=True),
-        "getenforce": CmdResult(127, "", "not found", not_found=True),
-    })
+    fs = DictFS(
+        {
+            "/etc/os-release": _os_release_content("ubuntu", "24.04"),
+            "/sys/class/dmi/id/sys_vendor": "Google\n",
+            "/sys/class/dmi/id/product_name": "Google Compute Engine\n",
+            "/sys/class/dmi/id/chassis_asset_tag": "gcp-xyz\n",
+        }
+    )
+    runner = ScriptedRunner(
+        {
+            "docker --version": CmdResult(127, "", "not found", not_found=True),
+            "docker ps -q": CmdResult(127, "", "not found", not_found=True),
+            "docker ps -a --filter label=coolify -q": CmdResult(127, "", "not found", not_found=True),
+            "systemctl is-active kubelet": CmdResult(3, "inactive\n", ""),
+            "wg show": CmdResult(1, "", "no devices"),
+            "systemctl is-active fail2ban": CmdResult(3, "inactive\n", ""),
+            "pgrep -x fail2ban-server": CmdResult(1, "", ""),
+            "systemctl is-active crowdsec": CmdResult(3, "inactive\n", ""),
+            "pgrep -x csd": CmdResult(1, "", ""),
+            "systemctl is-active auditd": CmdResult(3, "inactive\n", ""),
+            "pgrep -x auditd": CmdResult(1, "", ""),
+            "aa-status": CmdResult(127, "", "not found", not_found=True),
+            "getenforce": CmdResult(127, "", "not found", not_found=True),
+        }
+    )
     env = detect_environment(fs=fs, runner=runner)
     assert env.cloud_provider == "gcp"
     assert any("Google" in h for h in env.cloud_hints)
@@ -173,29 +193,34 @@ def test_gcp_vm():
 # Kubernetes node
 # ---------------------------------------------------------------------------
 
+
 def test_kubernetes_node():
-    fs = DictFS({
-        "/etc/os-release": _os_release_content("debian", "12"),
-        "/etc/kubernetes": "",
-        "/sys/class/dmi/id/sys_vendor": "Amazon EC2\n",
-        "/sys/class/dmi/id/product_name": "Nitro System\n",
-        "/sys/class/dmi/id/chassis_asset_tag": "aws-abc\n",
-    })
-    runner = ScriptedRunner({
-        "docker --version": CmdResult(0, "Docker version 26.0.1\n", ""),
-        "docker ps -q": CmdResult(0, "aaa\nbbb\n", ""),
-        "docker ps -a --filter label=coolify -q": CmdResult(0, "", ""),
-        "systemctl is-active kubelet": CmdResult(0, "active\n", ""),
-        "wg show": CmdResult(1, "", "no devices"),
-        "systemctl is-active fail2ban": CmdResult(3, "inactive\n", ""),
-        "pgrep -x fail2ban-server": CmdResult(1, "", ""),
-        "systemctl is-active crowdsec": CmdResult(3, "inactive\n", ""),
-        "pgrep -x csd": CmdResult(1, "", ""),
-        "systemctl is-active auditd": CmdResult(0, "active\n", ""),
-        "pgrep -x auditd": CmdResult(0, "42\n", ""),
-        "aa-status": CmdResult(127, "", "not found", not_found=True),
-        "getenforce": CmdResult(0, "Enforcing\n", ""),
-    })
+    fs = DictFS(
+        {
+            "/etc/os-release": _os_release_content("debian", "12"),
+            "/etc/kubernetes": "",
+            "/sys/class/dmi/id/sys_vendor": "Amazon EC2\n",
+            "/sys/class/dmi/id/product_name": "Nitro System\n",
+            "/sys/class/dmi/id/chassis_asset_tag": "aws-abc\n",
+        }
+    )
+    runner = ScriptedRunner(
+        {
+            "docker --version": CmdResult(0, "Docker version 26.0.1\n", ""),
+            "docker ps -q": CmdResult(0, "aaa\nbbb\n", ""),
+            "docker ps -a --filter label=coolify -q": CmdResult(0, "", ""),
+            "systemctl is-active kubelet": CmdResult(0, "active\n", ""),
+            "wg show": CmdResult(1, "", "no devices"),
+            "systemctl is-active fail2ban": CmdResult(3, "inactive\n", ""),
+            "pgrep -x fail2ban-server": CmdResult(1, "", ""),
+            "systemctl is-active crowdsec": CmdResult(3, "inactive\n", ""),
+            "pgrep -x csd": CmdResult(1, "", ""),
+            "systemctl is-active auditd": CmdResult(0, "active\n", ""),
+            "pgrep -x auditd": CmdResult(0, "42\n", ""),
+            "aa-status": CmdResult(127, "", "not found", not_found=True),
+            "getenforce": CmdResult(0, "Enforcing\n", ""),
+        }
+    )
     env = detect_environment(fs=fs, runner=runner)
     assert env.kubernetes is True
     assert env.cloud_provider == "aws"
@@ -210,23 +235,26 @@ def test_kubernetes_node():
 # Cache behaviour
 # ---------------------------------------------------------------------------
 
+
 def test_cache_returns_same_object():
     fs = DictFS({"/etc/os-release": _os_release_content("ubuntu", "24.04")})
-    runner = ScriptedRunner({
-        "docker --version": CmdResult(127, "", "nf", not_found=True),
-        "docker ps -q": CmdResult(127, "", "nf", not_found=True),
-        "docker ps -a --filter label=coolify -q": CmdResult(127, "", "nf", not_found=True),
-        "systemctl is-active kubelet": CmdResult(3, "inactive\n", ""),
-        "wg show": CmdResult(1, "", ""),
-        "systemctl is-active fail2ban": CmdResult(3, "inactive\n", ""),
-        "pgrep -x fail2ban-server": CmdResult(1, "", ""),
-        "systemctl is-active crowdsec": CmdResult(3, "inactive\n", ""),
-        "pgrep -x csd": CmdResult(1, "", ""),
-        "systemctl is-active auditd": CmdResult(3, "inactive\n", ""),
-        "pgrep -x auditd": CmdResult(1, "", ""),
-        "aa-status": CmdResult(127, "", "nf", not_found=True),
-        "getenforce": CmdResult(127, "", "nf", not_found=True),
-    })
+    runner = ScriptedRunner(
+        {
+            "docker --version": CmdResult(127, "", "nf", not_found=True),
+            "docker ps -q": CmdResult(127, "", "nf", not_found=True),
+            "docker ps -a --filter label=coolify -q": CmdResult(127, "", "nf", not_found=True),
+            "systemctl is-active kubelet": CmdResult(3, "inactive\n", ""),
+            "wg show": CmdResult(1, "", ""),
+            "systemctl is-active fail2ban": CmdResult(3, "inactive\n", ""),
+            "pgrep -x fail2ban-server": CmdResult(1, "", ""),
+            "systemctl is-active crowdsec": CmdResult(3, "inactive\n", ""),
+            "pgrep -x csd": CmdResult(1, "", ""),
+            "systemctl is-active auditd": CmdResult(3, "inactive\n", ""),
+            "pgrep -x auditd": CmdResult(1, "", ""),
+            "aa-status": CmdResult(127, "", "nf", not_found=True),
+            "getenforce": CmdResult(127, "", "nf", not_found=True),
+        }
+    )
     env1 = detect_environment(fs=fs, runner=runner)
     env2 = detect_environment(fs=fs, runner=runner)
     assert env1 is env2
@@ -239,6 +267,7 @@ def test_cache_returns_same_object():
 # ---------------------------------------------------------------------------
 # Helper predicates
 # ---------------------------------------------------------------------------
+
 
 def test_is_container_host_false():
     env = Environment()
@@ -257,17 +286,30 @@ def test_is_container_host_true_k8s():
 
 def test_json_serialisable():
     env = Environment(
-        os_id="ubuntu", os_version="24.04", architecture="aarch64",
-        python_version="3.12", python_ge_312=True,
-        docker_socket=True, docker_binary=True, docker_running_containers=35,
-        coolify=True, kubernetes=False, wireguard=False,
-        cloud_provider="oracle", cloud_hints=["sys_vendor=Oracle Corporation"],
-        fail2ban=True, crowdsec=True, auditd=False,
-        apparmor=True, selinux=False, selinux_mode="",
+        os_id="ubuntu",
+        os_version="24.04",
+        architecture="aarch64",
+        python_version="3.12",
+        python_ge_312=True,
+        docker_socket=True,
+        docker_binary=True,
+        docker_running_containers=35,
+        coolify=True,
+        kubernetes=False,
+        wireguard=False,
+        cloud_provider="oracle",
+        cloud_hints=["sys_vendor=Oracle Corporation"],
+        fail2ban=True,
+        crowdsec=True,
+        auditd=False,
+        apparmor=True,
+        selinux=False,
+        selinux_mode="",
     )
     d = env.to_dict()
     assert d["docker_running_containers"] == 35
     assert d["cloud_provider"] == "oracle"
     assert isinstance(d["cloud_hints"], list)
     import json
+
     json.dumps(d)

@@ -2,12 +2,10 @@
 
 import json
 from typing import Any, Dict, List
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-import pytest
-
-from docker_ports import assess_docker_ports, _get_published_ports, _parse_iptables_docker_user, _parse_nft_docker_user
-from common import run_cmd, STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_SKIPPED
+from common import STATUS_CRITICAL, STATUS_PASS, STATUS_SKIPPED
+from docker_ports import assess_docker_ports
 
 
 def _make_docker_ps_output(ports: List[Dict[str, Any]]) -> str:

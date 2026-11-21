@@ -1,11 +1,18 @@
 """Module 6: Log Tampering Protection & Intrusion Monitor."""
+
 import os
 import re
-import datetime
 from collections import Counter
+
 from common import (
-    run_cmd, read_text, is_root, make_check, skipped_check,
-    STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED,
+    STATUS_CRITICAL,
+    STATUS_INFO,
+    STATUS_PASS,
+    STATUS_WARNING,
+    make_check,
+    read_text,
+    run_cmd,
+    skipped_check,
 )
 
 CATEGORY = "logs"
@@ -19,7 +26,8 @@ def _check_log_attr(log_path, check_id, remediation_id, log_name):
     try:
         if not os.path.exists(log_path):
             return make_check(
-                check_id, CATEGORY,
+                check_id,
+                CATEGORY,
                 f"{log_name} protection",
                 STATUS_INFO,
                 "Checks whether the log file exists and recommends remote log shipping.",
@@ -27,13 +35,16 @@ def _check_log_attr(log_path, check_id, remediation_id, log_name):
                 f"test -f {log_path}",
                 current_value=f"{log_name} not found (journald-only or rotated away)",
                 recommended_value="Consider remote log shipping (rsyslog/journald forwarding) or auditd for tamper-proof logging.",
-                details=[f"{log_name} does not exist. Consider forwarding logs to a remote server for tamper-proof storage."],
+                details=[
+                    f"{log_name} does not exist. Consider forwarding logs to a remote server for tamper-proof storage."
+                ],
                 remediation_id=None,
                 manual_command="",
             )
 
         return make_check(
-            check_id, CATEGORY,
+            check_id,
+            CATEGORY,
             f"{log_name} protection",
             STATUS_INFO,
             "Checks whether the log file exists and recommends remote log shipping.",
@@ -47,9 +58,11 @@ def _check_log_attr(log_path, check_id, remediation_id, log_name):
         )
     except Exception as e:
         import logging
+
         logging.getLogger("securitywizard").exception("Error checking %s", log_path)
         return skipped_check(
-            check_id, CATEGORY,
+            check_id,
+            CATEGORY,
             f"{log_name} protection",
             "Checks whether the log file exists and recommends remote log shipping.",
             "Without remote log shipping, a compromised root user can delete or truncate local logs, destroying forensic evidence.",
@@ -73,11 +86,12 @@ def _check_brute_force():
             )
             if rc != 0 or not out.strip():
                 return skipped_check(
-                    "LOG-003", CATEGORY,
+                    "LOG-003",
+                    CATEGORY,
                     "Brute-force telemetry: failed SSH logins, invalid users, top attacker IPs",
                     "Parses recent authentication logs for failed SSH logins, invalid users, and top attacking IPs.",
                     "Brute-force attacks can exhaust accounts or guess passwords. Without telemetry, an admin may not notice an ongoing attack in time.",
-                    f"journalctl -u ssh -u sshd --no-pager -n 5000 --output=cat",
+                    "journalctl -u ssh -u sshd --no-pager -n 5000 --output=cat",
                     "No auth log data available (auth.log missing and journalctl returned no data).",
                     remediation_id=None,
                 )
@@ -90,13 +104,9 @@ def _check_brute_force():
         ip_counter = Counter()
 
         # Pattern for failed password: "Failed password for (invalid user )?USER from IP"
-        failed_pattern = re.compile(
-            r"Failed password for (invalid user )?(\S+) from (\S+)"
-        )
+        failed_pattern = re.compile(r"Failed password for (invalid user )?(\S+) from (\S+)")
         # Pattern for invalid user: "Invalid user USER from IP"
-        invalid_pattern = re.compile(
-            r"Invalid user (\S+) from (\S+)"
-        )
+        invalid_pattern = re.compile(r"Invalid user (\S+) from (\S+)")
 
         for line in log_content.splitlines():
             m = failed_pattern.search(line)
@@ -120,15 +130,21 @@ def _check_brute_force():
 
         if total_failures > 1000:
             status = STATUS_CRITICAL
-            current_value = f"{total_failures} failures ({failed_passwords} failed passwords, {invalid_users} invalid users)"
+            current_value = (
+                f"{total_failures} failures ({failed_passwords} failed passwords, {invalid_users} invalid users)"
+            )
             recommended_value = "Investigate and block top attacker IPs; consider fail2ban or crowdsec."
         elif total_failures > 100:
             status = STATUS_WARNING
-            current_value = f"{total_failures} failures ({failed_passwords} failed passwords, {invalid_users} invalid users)"
+            current_value = (
+                f"{total_failures} failures ({failed_passwords} failed passwords, {invalid_users} invalid users)"
+            )
             recommended_value = "Investigate and block top attacker IPs; consider fail2ban or crowdsec."
         elif total_failures > 0:
             status = STATUS_INFO
-            current_value = f"{total_failures} failures ({failed_passwords} failed passwords, {invalid_users} invalid users)"
+            current_value = (
+                f"{total_failures} failures ({failed_passwords} failed passwords, {invalid_users} invalid users)"
+            )
             recommended_value = "Monitor for increasing failure counts; consider fail2ban."
         else:
             status = STATUS_PASS
@@ -137,7 +153,9 @@ def _check_brute_force():
 
         details = []
         if total_failures > 0:
-            details.append(f"Total failures: {total_failures} ({failed_passwords} failed passwords, {invalid_users} invalid users)")
+            details.append(
+                f"Total failures: {total_failures} ({failed_passwords} failed passwords, {invalid_users} invalid users)"
+            )
             details.append("")
             details.append("Top 5 usernames:")
             for rank, (user, count) in enumerate(user_counter.most_common(5), 1):
@@ -150,7 +168,8 @@ def _check_brute_force():
             details.append("No failed logins or invalid users found in the log.")
 
         return make_check(
-            "LOG-003", CATEGORY,
+            "LOG-003",
+            CATEGORY,
             "Brute-force telemetry: failed SSH logins, invalid users, top attacker IPs",
             status,
             "Parses the authentication log for failed SSH password attempts and invalid user logins. "
@@ -166,7 +185,8 @@ def _check_brute_force():
         )
     except Exception as e:
         return skipped_check(
-            "LOG-003", CATEGORY,
+            "LOG-003",
+            CATEGORY,
             "Brute-force telemetry: failed SSH logins, invalid users, top attacker IPs",
             "Parses recent authentication logs for failed SSH logins, invalid users, and top attacking IPs.",
             "Brute-force attacks can exhaust accounts or guess passwords. Without telemetry, an admin may not notice an ongoing attack in time.",
@@ -214,7 +234,8 @@ def _check_fail2ban_crowdsec():
             ]
 
         return make_check(
-            "LOG-004", CATEGORY,
+            "LOG-004",
+            CATEGORY,
             "fail2ban / crowdsec status",
             status,
             "Checks whether fail2ban or crowdsec is running. These tools automatically ban IP addresses "
@@ -230,7 +251,8 @@ def _check_fail2ban_crowdsec():
         )
     except Exception as e:
         return skipped_check(
-            "LOG-004", CATEGORY,
+            "LOG-004",
+            CATEGORY,
             "fail2ban / crowdsec status",
             "Checks whether fail2ban or crowdsec is running for automatic brute-force protection.",
             "Without fail2ban or crowdsec, brute-force attacks must be detected and blocked manually.",
@@ -261,7 +283,8 @@ def _check_auditd():
             ]
 
         return make_check(
-            "LOG-005", CATEGORY,
+            "LOG-005",
+            CATEGORY,
             "auditd status",
             status,
             "Checks whether the audit daemon (auditd) is running. auditd records system calls and security-relevant events, "
@@ -277,7 +300,8 @@ def _check_auditd():
         )
     except Exception as e:
         return skipped_check(
-            "LOG-005", CATEGORY,
+            "LOG-005",
+            CATEGORY,
             "auditd status",
             "Checks whether the audit daemon (auditd) is running for system call auditing.",
             "Without auditd, system-level events like file access and privilege escalation are not logged.",

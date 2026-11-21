@@ -10,6 +10,7 @@ Modes (``get_auth_mode()``):
   * ``token``       - static bearer token supplied through SECURITYWIZARD_TOKEN
   * ``off``         - authentication explicitly disabled with SECURITYWIZARD_AUTH=0
 """
+
 import base64
 import hashlib
 import hmac
@@ -34,10 +35,46 @@ INITIAL_CREDENTIALS_FILE = "initial-credentials.txt"
 MIN_PASSWORD_LENGTH = 8
 
 _WORDS = [
-    "river", "moon", "stone", "cloud", "tiger", "maple", "amber", "falcon", "ocean", "winter",
-    "silver", "garden", "forest", "bridge", "candle", "desert", "eagle", "ember", "harbor", "island",
-    "jungle", "kettle", "lemon", "meadow", "north", "olive", "pearl", "quiet", "rocket", "sunset",
-    "thunder", "violet", "willow", "yellow", "zebra", "anchor", "breeze", "copper", "dragon", "echo",
+    "river",
+    "moon",
+    "stone",
+    "cloud",
+    "tiger",
+    "maple",
+    "amber",
+    "falcon",
+    "ocean",
+    "winter",
+    "silver",
+    "garden",
+    "forest",
+    "bridge",
+    "candle",
+    "desert",
+    "eagle",
+    "ember",
+    "harbor",
+    "island",
+    "jungle",
+    "kettle",
+    "lemon",
+    "meadow",
+    "north",
+    "olive",
+    "pearl",
+    "quiet",
+    "rocket",
+    "sunset",
+    "thunder",
+    "violet",
+    "willow",
+    "yellow",
+    "zebra",
+    "anchor",
+    "breeze",
+    "copper",
+    "dragon",
+    "echo",
 ]
 
 # --- configuration and state -------------------------------------------------------------------
@@ -93,6 +130,7 @@ def _parse_allowed_hosts() -> list:
 
 # --- credential storage ------------------------------------------------------------------------
 
+
 def _write_private(path: str, text: str) -> None:
     """Atomically write ``text`` to ``path`` with owner-only permissions."""
     directory = os.path.dirname(path) or "."
@@ -147,18 +185,22 @@ def _save_store(username: str, password_hash: str, is_default: bool) -> None:
 def _announce_initial_credentials(username: str, password: str) -> None:
     """Print the generated credentials exactly once (console + private file)."""
     path = os.path.join(get_data_dir(), INITIAL_CREDENTIALS_FILE)
-    note = ("SecurityWizard initial credentials (default, please change them after the first login)\n"
-            "username: %s\npassword: %s\n" % (username, password))
+    note = (
+        "SecurityWizard initial credentials (default, please change them after the first login)\n"
+        "username: %s\npassword: %s\n" % (username, password)
+    )
     try:
         _write_private(path, note)
     except OSError as exc:
         logger.error("Could not write %s: %s", path, exc)
         path = "(not saved)"
     line = "=" * 64
-    banner = ("\n%s\n SecurityWizard is locked. Default login credentials:\n"
-              "   username: %s\n   password: %s\n"
-              " These are the DEFAULT credentials - please change them after logging in.\n"
-              " Also saved in: %s\n%s\n" % (line, username, password, path, line))
+    banner = (
+        "\n%s\n SecurityWizard is locked. Default login credentials:\n"
+        "   username: %s\n   password: %s\n"
+        " These are the DEFAULT credentials - please change them after logging in.\n"
+        " Also saved in: %s\n%s\n" % (line, username, password, path, line)
+    )
     print(banner, flush=True)
 
 
@@ -205,10 +247,12 @@ def _load_credentials() -> None:
 
 # --- password hashing --------------------------------------------------------------------------
 
+
 def hash_password(password: str) -> str:
     """Hash a password with argon2 when available, otherwise PBKDF2-HMAC-SHA256."""
     try:
         from argon2 import PasswordHasher
+
         return PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4).hash(password)
     except ImportError:
         salt = secrets.token_hex(16)
@@ -222,6 +266,7 @@ def verify_password(password: str, password_hash: Optional[str]) -> bool:
     if password_hash.startswith("$argon2"):
         try:
             from argon2 import PasswordHasher
+
             return bool(PasswordHasher().verify(password_hash, password))
         except ImportError:
             return False
@@ -249,7 +294,9 @@ def verify_login(username: str, password: str) -> bool:
     return bool(user_ok and pw_ok and stored_hash)
 
 
-def change_credentials(current_password: str, new_password: str, new_username: Optional[str] = None) -> Tuple[bool, str]:
+def change_credentials(
+    current_password: str, new_password: str, new_username: Optional[str] = None
+) -> Tuple[bool, str]:
     """Change the stored credentials. Returns (ok, message)."""
     global _username, _password_hash, _is_default, _session_epoch
     with _lock:
@@ -276,6 +323,7 @@ def change_credentials(current_password: str, new_password: str, new_username: O
 
 
 # --- sessions ----------------------------------------------------------------------------------
+
 
 def _sign(payload_b64: str) -> str:
     return hmac.new((_session_secret or "").encode("utf-8"), payload_b64.encode("utf-8"), hashlib.sha256).hexdigest()
@@ -335,6 +383,7 @@ def get_auth_dependency() -> Optional[Callable]:
 
 
 # --- accessors ---------------------------------------------------------------------------------
+
 
 def is_auth_enabled() -> bool:
     return bool(_auth_enabled)

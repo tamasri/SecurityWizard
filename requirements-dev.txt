@@ -1,9 +1,11 @@
 -r requirements.txt
 pytest==9.2.0
 pytest-cov==7.1.0
+pytest-timeout==2.4.0
 httpx==0.28.1
 ruff==0.17.6
 mypy==2.4.1
 bandit==1.9.4
 pyyaml==6.0.4
 tomli==2.5.0
+pip-audit>=2.7

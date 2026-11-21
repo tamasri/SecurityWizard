@@ -26,9 +26,13 @@ def _state_path(backup_dir: str) -> str:
     return os.path.join(backup_dir, "deadman.json")
 
 
-def arm(token: str, revert_callable: Callable[[], None], minutes: float,
-        backup_dir: str,
-        timer_factory: Optional[Callable[[float, Callable[[], None]], threading.Timer]] = None) -> str:
+def arm(
+    token: str,
+    revert_callable: Callable[[], None],
+    minutes: float,
+    backup_dir: str,
+    timer_factory: Optional[Callable[[float, Callable[[], None]], threading.Timer]] = None,
+) -> str:
     """Arm the dead-man switch for *token*.
 
     *revert_callable* is invoked after *minutes* unless ``confirm(token)`` is
@@ -94,9 +98,11 @@ def _remove_persisted(token: str, backup_dir: str) -> None:
             json.dump(states, f, indent=2)
 
 
-def recover_pending(backup_dir: str,
-                    revert_factory: Callable[[str], Callable[[], None]],
-                    timer_factory: Optional[Callable[[float, Callable[[], None]], threading.Timer]] = None) -> List[str]:
+def recover_pending(
+    backup_dir: str,
+    revert_factory: Callable[[str], Callable[[], None]],
+    timer_factory: Optional[Callable[[float, Callable[[], None]], threading.Timer]] = None,
+) -> List[str]:
     """Re-arm any tokens that were persisted but not confirmed before a restart.
 
     *revert_factory* maps a token to the revert callable to invoke.  Only tokens

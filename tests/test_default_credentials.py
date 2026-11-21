@@ -1,4 +1,5 @@
 """The dashboard is locked by default with generated credentials that the user may (but need not) change."""
+
 import json
 import os
 import re
@@ -90,8 +91,11 @@ def test_changing_credentials_is_optional_and_works(locked, tmp_path):
     _login(locked, user, password)
     # everything keeps working while the defaults are still in place
     assert locked.get("/api/status").json()["using_default_credentials"] is True
-    done = locked.post("/api/account/change", headers=CSRF,
-                       json={"current_password": password, "new_password": "a-better-pass-1", "new_username": "alice"})
+    done = locked.post(
+        "/api/account/change",
+        headers=CSRF,
+        json={"current_password": password, "new_password": "a-better-pass-1", "new_username": "alice"},
+    )
     assert done.status_code == 200
     assert not (tmp_path / "data" / auth.INITIAL_CREDENTIALS_FILE).exists()
     assert locked.get("/api/auth/state").json()["using_default_credentials"] is False
@@ -106,14 +110,18 @@ def test_change_validation(locked, tmp_path, new_password, expected):
     user, password = _initial(tmp_path)
     _login(locked, user, password)
     current = password if new_password == "short" else "not-the-current-one"
-    resp = locked.post("/api/account/change", headers=CSRF, json={"current_password": current, "new_password": new_password})
+    resp = locked.post(
+        "/api/account/change", headers=CSRF, json={"current_password": current, "new_password": new_password}
+    )
     assert resp.status_code == expected
 
 
 def test_change_rejects_same_password(locked, tmp_path):
     user, password = _initial(tmp_path)
     _login(locked, user, password)
-    resp = locked.post("/api/account/change", headers=CSRF, json={"current_password": password, "new_password": password})
+    resp = locked.post(
+        "/api/account/change", headers=CSRF, json={"current_password": password, "new_password": password}
+    )
     assert resp.status_code == 400
 
 
@@ -121,7 +129,9 @@ def test_old_sessions_are_invalidated_after_a_change(locked, tmp_path):
     user, password = _initial(tmp_path)
     _login(locked, user, password)
     old_cookie = locked.cookies.get(auth.SESSION_COOKIE)
-    locked.post("/api/account/change", headers=CSRF, json={"current_password": password, "new_password": "another-pass-22"})
+    locked.post(
+        "/api/account/change", headers=CSRF, json={"current_password": password, "new_password": "another-pass-22"}
+    )
     assert auth._verify_session_token(old_cookie) is None
 
 
@@ -152,7 +162,10 @@ def test_environment_credentials_cannot_be_changed_in_the_ui(monkeypatch):
     with TestClient(main.app, base_url="http://127.0.0.1:8443") as client:
         assert _login(client, "ops", "env-password-1").status_code == 200
         assert client.get("/api/auth/state").json()["using_default_credentials"] is False
-        resp = client.post("/api/account/change", headers=CSRF,
-                           json={"current_password": "env-password-1", "new_password": "something-else-9"})
+        resp = client.post(
+            "/api/account/change",
+            headers=CSRF,
+            json={"current_password": "env-password-1", "new_password": "something-else-9"},
+        )
         assert resp.status_code == 400
     auth.reset_for_tests()

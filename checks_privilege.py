@@ -1,22 +1,21 @@
 """SecurityWizard – Module 4: Privilege Escalation & Filesystem Integrity Scanner."""
 
-import os
-import stat
 import glob
 import logging
+import os
+import stat
 import traceback
 
 from common import (
-    run_cmd,
-    read_text,
-    is_root,
-    make_check,
-    skipped_check,
-    STATUS_PASS,
-    STATUS_WARNING,
     STATUS_CRITICAL,
     STATUS_INFO,
+    STATUS_PASS,
     STATUS_SKIPPED,
+    STATUS_WARNING,
+    make_check,
+    read_text,
+    run_cmd,
+    skipped_check,
 )
 from config import get_config
 
@@ -38,9 +37,13 @@ def build_find_cmd(paths):
     cmd.extend(paths)
     cmd.append("-xdev")
     exclusions = [
-        "/proc", "/sys",
-        "/var/lib/docker", "/var/lib/containerd",
-        "/snap", "/var/snap", "/var/lib/snapd",
+        "/proc",
+        "/sys",
+        "/var/lib/docker",
+        "/var/lib/containerd",
+        "/snap",
+        "/var/snap",
+        "/var/lib/snapd",
     ]
     for ex in exclusions:
         cmd.extend(["-path", ex, "-prune", "-o"])
@@ -54,29 +57,93 @@ def build_find_cmd(paths):
 def _check_suid_sgid():
     """Scan critical paths for SUID/SGID binaries and compare against a whitelist."""
     safe_baseline = {
-        "passwd", "sudo", "su", "mount", "umount", "ping", "ping6", "chsh",
-        "chfn", "gpasswd", "newgrp", "fusermount", "fusermount3", "pkexec",
-        "ssh-agent", "unix_chkpwd", "crontab", "expiry", "chage", "wall",
-        "write", "dotlockfile", "mount.nfs", "Xorg.wrap",
-        "mail", "mailx", "mailq", "mailstats",
+        "passwd",
+        "sudo",
+        "su",
+        "mount",
+        "umount",
+        "ping",
+        "ping6",
+        "chsh",
+        "chfn",
+        "gpasswd",
+        "newgrp",
+        "fusermount",
+        "fusermount3",
+        "pkexec",
+        "ssh-agent",
+        "unix_chkpwd",
+        "crontab",
+        "expiry",
+        "chage",
+        "wall",
+        "write",
+        "dotlockfile",
+        "mount.nfs",
+        "Xorg.wrap",
+        "mail",
+        "mailx",
+        "mailq",
+        "mailstats",
     }
     risky_gtfo = {
-        "vim", "vi", "find", "bash", "sh", "dash", "python", "python2",
-        "python3", "perl", "ruby", "nmap", "docker", "awk", "gawk", "env",
-        "less", "more", "nano", "cp", "tar", "zip", "php", "node", "nodejs",
-        "python3.10", "python3.11", "python3.9", "python3.8", "python3.7",
-        "python3.6", "python3.5", "python3.4", "python3.3", "python3.2",
-        "python3.1", "python3.0", "python2.7", "python2.6", "python2.5",
+        "vim",
+        "vi",
+        "find",
+        "bash",
+        "sh",
+        "dash",
+        "python",
+        "python2",
+        "python3",
+        "perl",
+        "ruby",
+        "nmap",
+        "docker",
+        "awk",
+        "gawk",
+        "env",
+        "less",
+        "more",
+        "nano",
+        "cp",
+        "tar",
+        "zip",
+        "php",
+        "node",
+        "nodejs",
+        "python3.10",
+        "python3.11",
+        "python3.9",
+        "python3.8",
+        "python3.7",
+        "python3.6",
+        "python3.5",
+        "python3.4",
+        "python3.3",
+        "python3.2",
+        "python3.1",
+        "python3.0",
+        "python2.7",
+        "python2.6",
+        "python2.5",
     }
     scan_paths = [
-        "/usr/bin", "/usr/sbin", "/bin", "/sbin",
-        "/usr/local/bin", "/usr/local/sbin",
-        "/usr/lib", "/usr/libexec", "/opt",
+        "/usr/bin",
+        "/usr/sbin",
+        "/bin",
+        "/sbin",
+        "/usr/local/bin",
+        "/usr/local/sbin",
+        "/usr/lib",
+        "/usr/libexec",
+        "/opt",
     ]
     existing = [p for p in scan_paths if os.path.isdir(p)]
     if not existing:
         return make_check(
-            "PRV-001", CATEGORY,
+            "PRV-001",
+            CATEGORY,
             "SUID/SGID binary hunter vs known-safe baseline",
             STATUS_SKIPPED,
             "Scans critical paths for binaries with SUID/SGID bits and compares them against a known-safe baseline whitelist.",
@@ -92,7 +159,8 @@ def _check_suid_sgid():
         reason = ("find failed: " + err.strip()) if err.strip() else "find failed (rc=%d)" % rc
         logger.warning("PRV-001: %s", reason)
         return make_check(
-            "PRV-001", CATEGORY,
+            "PRV-001",
+            CATEGORY,
             "SUID/SGID binary hunter vs known-safe baseline",
             STATUS_SKIPPED,
             "Scans critical paths for binaries with SUID/SGID bits and compares them against a known-safe baseline whitelist.",
@@ -142,7 +210,8 @@ def _check_suid_sgid():
         current_value = "All " + str(len(binaries)) + " SUID/SGID binaries are in the safe baseline or dpkg-owned"
 
     return make_check(
-        "PRV-001", CATEGORY,
+        "PRV-001",
+        CATEGORY,
         "SUID/SGID binary hunter vs known-safe baseline",
         status,
         "Scans critical paths for binaries with SUID/SGID bits and compares them against a known-safe baseline whitelist.",
@@ -164,7 +233,8 @@ def _check_passwd():
     path = "/etc/passwd"
     if not os.path.isfile(path):
         return make_check(
-            "PRV-002", CATEGORY,
+            "PRV-002",
+            CATEGORY,
             "/etc/passwd ownership and permissions (0644 root:root)",
             STATUS_SKIPPED,
             "Checks that /etc/passwd is owned by root:root and has permissions 0644.",
@@ -186,7 +256,8 @@ def _check_passwd():
     else:
         status = STATUS_CRITICAL
     return make_check(
-        "PRV-002", CATEGORY,
+        "PRV-002",
+        CATEGORY,
         "/etc/passwd ownership and permissions (0644 root:root)",
         status,
         "Checks that /etc/passwd is owned by root:root and has permissions 0644.",
@@ -207,7 +278,8 @@ def _check_shadow():
     path = "/etc/shadow"
     if not os.path.isfile(path):
         return make_check(
-            "PRV-003", CATEGORY,
+            "PRV-003",
+            CATEGORY,
             "/etc/shadow permissions (0640 or 0000)",
             STATUS_SKIPPED,
             "Checks that /etc/shadow has permissions 0640 or 0000 and is owned by root:shadow or root:root.",
@@ -229,7 +301,8 @@ def _check_shadow():
     else:
         status = STATUS_CRITICAL
     return make_check(
-        "PRV-003", CATEGORY,
+        "PRV-003",
+        CATEGORY,
         "/etc/shadow permissions (0640 or 0000)",
         status,
         "Checks that /etc/shadow has permissions 0640 or 0000 and is owned by root:shadow or root:root.",
@@ -250,7 +323,8 @@ def _check_group():
     path = "/etc/group"
     if not os.path.isfile(path):
         return make_check(
-            "PRV-004", CATEGORY,
+            "PRV-004",
+            CATEGORY,
             "/etc/group permissions (0644)",
             STATUS_SKIPPED,
             "Checks that /etc/group is owned by root:root and has permissions 0644.",
@@ -272,7 +346,8 @@ def _check_group():
     else:
         status = STATUS_CRITICAL
     return make_check(
-        "PRV-004", CATEGORY,
+        "PRV-004",
+        CATEGORY,
         "/etc/group permissions (0644)",
         status,
         "Checks that /etc/group is owned by root:root and has permissions 0644.",
@@ -293,7 +368,8 @@ def _check_sudoers():
     path = "/etc/sudoers"
     if not os.path.isfile(path):
         return make_check(
-            "PRV-005", CATEGORY,
+            "PRV-005",
+            CATEGORY,
             "/etc/sudoers permissions (0440)",
             STATUS_SKIPPED,
             "Checks that /etc/sudoers is owned by root:root and has permissions 0440.",
@@ -315,7 +391,8 @@ def _check_sudoers():
     else:
         status = STATUS_CRITICAL
     return make_check(
-        "PRV-005", CATEGORY,
+        "PRV-005",
+        CATEGORY,
         "/etc/sudoers permissions (0440)",
         status,
         "Checks that /etc/sudoers is owned by root:root and has permissions 0440.",
@@ -352,7 +429,10 @@ def _evaluate_sshd_config_permissions(mode: int, uid: int) -> str:
         content = read_text(path)
         if "PRIVATE KEY" in content or "RSA PRIVATE KEY" in content or "OPENSSH PRIVATE KEY" in content:
             return STATUS_CRITICAL
-        if "PasswordAuthentication" in content and "yes" in content.split("PasswordAuthentication")[-1].split("\n")[0].lower():
+        if (
+            "PasswordAuthentication" in content
+            and "yes" in content.split("PasswordAuthentication")[-1].split("\n")[0].lower()
+        ):
             return STATUS_CRITICAL
     # 0644 is the distro default: INFO
     if mode == 0o644:
@@ -369,7 +449,8 @@ def _check_sshd_config():
     path = "/etc/ssh/sshd_config"
     if not os.path.isfile(path):
         return make_check(
-            "PRV-006", CATEGORY,
+            "PRV-006",
+            CATEGORY,
             "/etc/ssh/sshd_config permissions",
             STATUS_SKIPPED,
             "Checks that /etc/ssh/sshd_config is owned by root and has safe permissions.",
@@ -388,7 +469,8 @@ def _check_sshd_config():
     current_value = "0" + mode_oct + " " + owner + ":" + group
     status = _evaluate_sshd_config_permissions(mode, uid)
     return make_check(
-        "PRV-006", CATEGORY,
+        "PRV-006",
+        CATEGORY,
         "/etc/ssh/sshd_config permissions",
         status,
         "Checks that /etc/ssh/sshd_config is owned by root and has safe permissions. 0644 is the distro default and is not secret.",
@@ -442,7 +524,8 @@ def _check_cron():
         status = STATUS_INFO
         current_value = "No cron jobs found"
     return make_check(
-        "PRV-007", CATEGORY,
+        "PRV-007",
+        CATEGORY,
         "Cron jobs inventory (system and user crontabs)",
         status,
         "Lists all system and user cron jobs and flags any cron files that are world-writable.",
@@ -461,7 +544,7 @@ def _check_cron():
 # ---------------------------------------------------------------------------
 def _check_nopasswd():
     """Parse /etc/sudoers and /etc/sudoers.d/* and classify each rule."""
-    from sudoers_parse import parse_all_sudoers, classify_rule
+    from sudoers_parse import classify_rule, parse_all_sudoers
 
     details = []
     critical_rules = []
@@ -473,8 +556,7 @@ def _check_nopasswd():
 
     for rule in rules:
         severity, reason = classify_rule(rule, config)
-        detail_line = "%s:%d: %s => %s (%s)" % (
-            rule.source_file, rule.line, rule.raw, severity, reason)
+        detail_line = "%s:%d: %s => %s (%s)" % (rule.source_file, rule.line, rule.raw, severity, reason)
         details.append(detail_line)
         if severity == STATUS_CRITICAL:
             critical_rules.append(rule)
@@ -487,12 +569,14 @@ def _check_nopasswd():
         status = STATUS_CRITICAL
         current_value = "Found %d critical sudoers rule(s): %s" % (
             len(critical_rules),
-            "; ".join(r.raw for r in critical_rules))
+            "; ".join(r.raw for r in critical_rules),
+        )
     elif warning_rules:
         status = STATUS_WARNING
         current_value = "Found %d warning-level sudoers rule(s): %s" % (
             len(warning_rules),
-            "; ".join(r.raw for r in warning_rules))
+            "; ".join(r.raw for r in warning_rules),
+        )
     elif info_rules:
         status = STATUS_INFO
         current_value = "Found %d narrow/info-level sudoers rule(s)" % len(info_rules)
@@ -501,7 +585,8 @@ def _check_nopasswd():
         current_value = "No sudoers rules found"
 
     return make_check(
-        "PRV-008", CATEGORY,
+        "PRV-008",
+        CATEGORY,
         "Sudoers rule analysis (NOPASSWD, wildcards, risky commands)",
         status,
         "Parses /etc/sudoers and /etc/sudoers.d/* and classifies each rule: "
@@ -539,13 +624,15 @@ def run_checks():
         try:
             checks.append(func())
         except Exception:
-            checks.append(skipped_check(
-                func.__name__.replace("_check_", "").upper(),
-                CATEGORY,
-                func.__doc__.strip() if func.__doc__ else func.__name__,
-                "Unexpected error while running this check.",
-                "The check itself failed, so the state of this setting is unknown.",
-                func.__name__,
-                "Exception: " + traceback.format_exc().strip(),
-            ))
+            checks.append(
+                skipped_check(
+                    func.__name__.replace("_check_", "").upper(),
+                    CATEGORY,
+                    func.__doc__.strip() if func.__doc__ else func.__name__,
+                    "Unexpected error while running this check.",
+                    "The check itself failed, so the state of this setting is unknown.",
+                    func.__name__,
+                    "Exception: " + traceback.format_exc().strip(),
+                )
+            )
     return checks

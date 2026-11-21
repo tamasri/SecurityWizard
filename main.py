@@ -110,8 +110,9 @@ def _with_headers(request: Request, response):
 def _session_response(content: Dict[str, Any], username: str) -> JSONResponse:
     token = auth._create_session_token(username)
     response = JSONResponse(content=content)
-    response.set_cookie(auth.SESSION_COOKIE, token, httponly=True, samesite="strict", secure=False,
-                        max_age=auth.SESSION_MAX_AGE)
+    response.set_cookie(
+        auth.SESSION_COOKIE, token, httponly=True, samesite="strict", secure=False, max_age=auth.SESSION_MAX_AGE
+    )
     return response
 
 
@@ -185,7 +186,9 @@ async def login(request: Request, body: LoginRequest):
         username = body.username if body.username else (auth.get_username() if mode == "password" else "")
         if auth.verify_login(username or "", body.password):
             security.audit_log("login", client, result="success")
-            return _session_response({"ok": True, "using_default_credentials": auth.using_default_credentials()}, username)
+            return _session_response(
+                {"ok": True, "using_default_credentials": auth.using_default_credentials()}, username
+            )
     else:
         security.audit_log("login", client, result="error")
         return JSONResponse(status_code=400, content={"detail": "Authentication is not configured"})
@@ -207,7 +210,9 @@ async def change_account(request: Request, body: ChangeCredentialsRequest):
     if not security.check_rate_limit("login", client):
         security.audit_log("account_change", client, result="rate_limited")
         return JSONResponse(status_code=429, content={"detail": "Too many attempts"})
-    ok, message = await run_in_threadpool(auth.change_credentials, body.current_password, body.new_password, body.new_username)
+    ok, message = await run_in_threadpool(
+        auth.change_credentials, body.current_password, body.new_password, body.new_username
+    )
     security.audit_log("account_change", client, result="success" if ok else "failed")
     if not ok:
         return JSONResponse(status_code=400, content={"detail": message})
@@ -218,6 +223,7 @@ async def change_account(request: Request, body: ChangeCredentialsRequest):
 @app.get("/api/status")
 async def get_status():
     from common import is_root
+
     return {
         "version": __version__,
         "dry_run_only": os.environ.get("SECURITYWIZARD_DRY_RUN_ONLY", "0") == "1",
@@ -243,12 +249,19 @@ def _finish_scan(job_id: str, started: str, result: Optional[dict], error: Optio
         if job_id in jobs:
             jobs[job_id].update(status="error" if error else "done", result=result, error=error)
     with _scan_lock:
-        _scan_state.update(status="finished", finished=finished.isoformat(), duration=duration,
-                           result=result, error=error, scan_id=scan_id)
+        _scan_state.update(
+            status="finished",
+            finished=finished.isoformat(),
+            duration=duration,
+            result=result,
+            error=error,
+            scan_id=scan_id,
+        )
 
 
 def _run_scan_job(job_id: str, started: str, category: Optional[str]) -> None:
     try:
+
         def progress_cb(done, total, current):
             with jobs_lock:
                 if job_id in jobs:
@@ -276,12 +289,24 @@ async def start_scan(req: ScanRequest):
         job_id = str(uuid.uuid4())
         started = datetime.now(timezone.utc).isoformat()
         total = len(scanner.MODULES) if not req.category else 1
-        _scan_state.update(status="running", job_id=job_id, scan_id=None, started=started, finished=None,
-                           duration=None, progress={"done": 0, "total": total, "current": ""},
-                           result=None, error=None)
+        _scan_state.update(
+            status="running",
+            job_id=job_id,
+            scan_id=None,
+            started=started,
+            finished=None,
+            duration=None,
+            progress={"done": 0, "total": total, "current": ""},
+            result=None,
+            error=None,
+        )
     with jobs_lock:
-        jobs[job_id] = {"status": "running", "progress": {"done": 0, "total": total, "current": ""},
-                        "result": None, "error": None}
+        jobs[job_id] = {
+            "status": "running",
+            "progress": {"done": 0, "total": total, "current": ""},
+            "result": None,
+            "error": None,
+        }
     threading.Thread(target=_run_scan_job, args=(job_id, started, req.category), daemon=True, name="scan").start()
     return {"job_id": job_id}
 

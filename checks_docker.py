@@ -2,22 +2,32 @@
 
 import json
 import logging
+
 from common import (
-    run_cmd,
-    make_check,
-    skipped_check,
-    STATUS_PASS,
-    STATUS_WARNING,
     STATUS_CRITICAL,
     STATUS_INFO,
-    STATUS_SKIPPED,
+    STATUS_PASS,
+    STATUS_WARNING,
+    make_check,
+    run_cmd,
+    skipped_check,
 )
 from config import get_config
 
 log = logging.getLogger("securitywizard.checks.docker")
 
 DANGEROUS_CAPS = {"SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE", "ALL"}
-SENSITIVE_HOST_PATHS = {"/", "/etc", "/var/run/docker.sock", "/root", "/home", "/boot", "/proc", "/sys", "/var/lib/docker"}
+SENSITIVE_HOST_PATHS = {
+    "/",
+    "/etc",
+    "/var/run/docker.sock",
+    "/root",
+    "/home",
+    "/boot",
+    "/proc",
+    "/sys",
+    "/var/lib/docker",
+}
 
 
 def analyze_container(inspect_dict: dict, allowlist_fn=None) -> list[dict]:
@@ -28,6 +38,7 @@ def analyze_container(inspect_dict: dict, allowlist_fn=None) -> list[dict]:
     """
     if allowlist_fn is None:
         cfg = get_config()
+
         def allowlist_fn(check_id, name):
             if check_id == "DOC-003":
                 return cfg.allowed_docker_sock(name)
@@ -44,90 +55,104 @@ def analyze_container(inspect_dict: dict, allowlist_fn=None) -> list[dict]:
     sock_mount = any(m.get("Source") == "/var/run/docker.sock" for m in inspect_dict.get("Mounts", []))
     if sock_mount:
         allowed = allowlist_fn("DOC-003", name)
-        findings.append({
-            "id": "DOC-003",
-            "title": "Container mounts /var/run/docker.sock",
-            "status": STATUS_INFO if allowed else STATUS_CRITICAL,
-            "detail": f"Container '{name}' mounts /var/run/docker.sock",
-            "allowed": bool(allowed),
-            "reason": "accepted by configuration" if allowed else "grants full Docker daemon control",
-        })
+        findings.append(
+            {
+                "id": "DOC-003",
+                "title": "Container mounts /var/run/docker.sock",
+                "status": STATUS_INFO if allowed else STATUS_CRITICAL,
+                "detail": f"Container '{name}' mounts /var/run/docker.sock",
+                "allowed": bool(allowed),
+                "reason": "accepted by configuration" if allowed else "grants full Docker daemon control",
+            }
+        )
 
     # DOC-004a: network=host
     if host_cfg.get("NetworkMode") == "host":
-        findings.append({
-            "id": "DOC-004",
-            "title": "Container uses --net=host",
-            "status": STATUS_WARNING,
-            "detail": f"Container '{name}' uses host network namespace",
-            "allowed": False,
-            "reason": "removes network isolation boundary",
-        })
+        findings.append(
+            {
+                "id": "DOC-004",
+                "title": "Container uses --net=host",
+                "status": STATUS_WARNING,
+                "detail": f"Container '{name}' uses host network namespace",
+                "allowed": False,
+                "reason": "removes network isolation boundary",
+            }
+        )
 
     # DOC-004b: pid=host
     if host_cfg.get("PidMode") == "host":
-        findings.append({
-            "id": "DOC-004",
-            "title": "Container uses --pid=host",
-            "status": STATUS_WARNING,
-            "detail": f"Container '{name}' uses host PID namespace",
-            "allowed": False,
-            "reason": "removes PID isolation boundary",
-        })
+        findings.append(
+            {
+                "id": "DOC-004",
+                "title": "Container uses --pid=host",
+                "status": STATUS_WARNING,
+                "detail": f"Container '{name}' uses host PID namespace",
+                "allowed": False,
+                "reason": "removes PID isolation boundary",
+            }
+        )
 
     # DOC-002: privileged
     if host_cfg.get("Privileged", False):
         allowed = allowlist_fn("DOC-002", name)
-        findings.append({
-            "id": "DOC-002",
-            "title": "Container runs with --privileged",
-            "status": STATUS_INFO if allowed else STATUS_CRITICAL,
-            "detail": f"Container '{name}' runs in privileged mode",
-            "allowed": bool(allowed),
-            "reason": "accepted by configuration" if allowed else "grants all capabilities and host device access",
-        })
+        findings.append(
+            {
+                "id": "DOC-002",
+                "title": "Container runs with --privileged",
+                "status": STATUS_INFO if allowed else STATUS_CRITICAL,
+                "detail": f"Container '{name}' runs in privileged mode",
+                "allowed": bool(allowed),
+                "reason": "accepted by configuration" if allowed else "grants all capabilities and host device access",
+            }
+        )
 
     # DOC-006: added capabilities
     cap_add = host_cfg.get("CapAdd", []) or []
     dangerous = [cap for cap in cap_add if cap in DANGEROUS_CAPS]
     if dangerous:
-        findings.append({
-            "id": "DOC-006",
-            "title": "Container adds dangerous capabilities",
-            "status": STATUS_WARNING,
-            "detail": f"Container '{name}' adds capabilities: {', '.join(dangerous)}",
-            "allowed": False,
-            "reason": "SYS_ADMIN/NET_ADMIN/SYS_PTRACE/ALL extend container privileges",
-        })
+        findings.append(
+            {
+                "id": "DOC-006",
+                "title": "Container adds dangerous capabilities",
+                "status": STATUS_WARNING,
+                "detail": f"Container '{name}' adds capabilities: {', '.join(dangerous)}",
+                "allowed": False,
+                "reason": "SYS_ADMIN/NET_ADMIN/SYS_PTRACE/ALL extend container privileges",
+            }
+        )
 
     # DOC-005: root without no-new-privileges
     user = config_cfg.get("User", "")
     if not user or user in ("0", "root"):
         sec_opts = host_cfg.get("SecurityOpt", []) or []
         if "no-new-privileges" not in sec_opts:
-            findings.append({
-                "id": "DOC-005",
-                "title": "Container runs as root without no-new-privileges",
-                "status": STATUS_WARNING,
-                "detail": f"Container '{name}' runs as root without no-new-privileges",
-                "allowed": False,
-                "reason": "root process can gain privileges via setuid/setgid or file capabilities",
-            })
+            findings.append(
+                {
+                    "id": "DOC-005",
+                    "title": "Container runs as root without no-new-privileges",
+                    "status": STATUS_WARNING,
+                    "detail": f"Container '{name}' runs as root without no-new-privileges",
+                    "allowed": False,
+                    "reason": "root process can gain privileges via setuid/setgid or file capabilities",
+                }
+            )
 
     # DOC-007: writable host bind mounts of sensitive paths
     for mount in inspect_dict.get("Mounts", []):
         if mount.get("Type") != "bind":
             continue
         source = mount.get("Source", "")
-        if source in SENSITIVE_HOST_PATHS and not mount.get("RW", True) is False:
-            findings.append({
-                "id": "DOC-007",
-                "title": "Writable host bind mount of sensitive path",
-                "status": STATUS_WARNING,
-                "detail": f"Container '{name}' mounts '{source}' read-write",
-                "allowed": False,
-                "reason": "writable mount of sensitive host path can expose or modify host files",
-            })
+        if source in SENSITIVE_HOST_PATHS and mount.get("RW", True) is not False:
+            findings.append(
+                {
+                    "id": "DOC-007",
+                    "title": "Writable host bind mount of sensitive path",
+                    "status": STATUS_WARNING,
+                    "detail": f"Container '{name}' mounts '{source}' read-write",
+                    "allowed": False,
+                    "reason": "writable mount of sensitive host path can expose or modify host files",
+                }
+            )
 
     return findings
 
@@ -167,7 +192,10 @@ def _check_docker_installed() -> dict:
     ids = _get_container_ids()
     if not _docker_available():
         return make_check(
-            "DOC-001", "docker", "Docker installed and running containers", STATUS_INFO,
+            "DOC-001",
+            "docker",
+            "Docker installed and running containers",
+            STATUS_INFO,
             "Checks whether the Docker engine is installed and the daemon is reachable on this host.",
             "Without Docker, container-based workloads and their security posture cannot be evaluated.",
             "docker info",
@@ -177,7 +205,10 @@ def _check_docker_installed() -> dict:
     count = len(ids)
     if count == 0:
         return make_check(
-            "DOC-001", "docker", "Docker installed and running containers", STATUS_PASS,
+            "DOC-001",
+            "docker",
+            "Docker installed and running containers",
+            STATUS_PASS,
             "Checks whether the Docker engine is installed and the daemon is reachable on this host.",
             "Without Docker, container-based workloads and their security posture cannot be evaluated.",
             "docker info",
@@ -185,7 +216,10 @@ def _check_docker_installed() -> dict:
             recommended_value="Docker installed and daemon running",
         )
     return make_check(
-        "DOC-001", "docker", "Docker installed and running containers", STATUS_PASS,
+        "DOC-001",
+        "docker",
+        "Docker installed and running containers",
+        STATUS_PASS,
         "Checks whether the Docker engine is installed and the daemon is reachable on this host.",
         "Without Docker, container-based workloads and their security posture cannot be evaluated.",
         "docker ps -q",
@@ -206,7 +240,10 @@ def _check_privileged() -> dict:
                 findings.append(f)
     if not findings:
         return make_check(
-            "DOC-002", "docker", "Containers running in --privileged mode", STATUS_PASS,
+            "DOC-002",
+            "docker",
+            "Containers running in --privileged mode",
+            STATUS_PASS,
             "Detects containers started with the --privileged flag, which grants all Linux capabilities and access to host devices.",
             "A privileged container can escape to the host, load kernel modules, and access all devices, effectively giving the attacker root on the host.",
             "docker inspect --format '{{.HostConfig.Privileged}}' <id>",
@@ -216,7 +253,10 @@ def _check_privileged() -> dict:
     details = [f["detail"] + (" (accepted by configuration)" if f["allowed"] else "") for f in findings]
     status = STATUS_INFO if all(f["allowed"] for f in findings) else STATUS_CRITICAL
     return make_check(
-        "DOC-002", "docker", "Containers running in --privileged mode", status,
+        "DOC-002",
+        "docker",
+        "Containers running in --privileged mode",
+        status,
         "Detects containers started with the --privileged flag, which grants all Linux capabilities and access to host devices.",
         "A privileged container can escape to the host, load kernel modules, and access all devices, effectively giving the attacker root on the host.",
         "docker inspect --format '{{.HostConfig.Privileged}}' <id>",
@@ -238,7 +278,10 @@ def _check_docker_sock() -> dict:
                 findings.append(f)
     if not findings:
         return make_check(
-            "DOC-003", "docker", "Containers mounting /var/run/docker.sock", STATUS_PASS,
+            "DOC-003",
+            "docker",
+            "Containers mounting /var/run/docker.sock",
+            STATUS_PASS,
             "Checks whether any container mounts the host Docker socket, which grants full control of the Docker daemon.",
             "With access to the Docker socket, an attacker can start a privileged container and escape to the host filesystem.",
             "docker inspect --format '{{range .Mounts}}{{.Source}}{{end}}' <id>",
@@ -248,7 +291,10 @@ def _check_docker_sock() -> dict:
     details = [f["detail"] + (" (accepted by configuration)" if f["allowed"] else "") for f in findings]
     status = STATUS_INFO if all(f["allowed"] for f in findings) else STATUS_CRITICAL
     return make_check(
-        "DOC-003", "docker", "Containers mounting /var/run/docker.sock", status,
+        "DOC-003",
+        "docker",
+        "Containers mounting /var/run/docker.sock",
+        status,
         "Checks whether any container mounts the host Docker socket, which grants full control of the Docker daemon.",
         "With access to the Docker socket, an attacker can start a privileged container and escape to the host filesystem.",
         "docker inspect --format '{{range .Mounts}}{{.Source}}{{end}}' <id>",
@@ -270,7 +316,10 @@ def _check_host_namespaces() -> dict:
                 findings.append(f)
     if not findings:
         return make_check(
-            "DOC-004", "docker", "Containers using --net=host or --pid=host", STATUS_PASS,
+            "DOC-004",
+            "docker",
+            "Containers using --net=host or --pid=host",
+            STATUS_PASS,
             "Detects containers that share the host network or PID namespace, removing key isolation boundaries.",
             "Host network/PID sharing lets a container sniff all host traffic or see and signal host processes, weakening isolation.",
             "docker inspect --format '{{.HostConfig.NetworkMode}} {{.HostConfig.PidMode}}' <id>",
@@ -279,7 +328,10 @@ def _check_host_namespaces() -> dict:
         )
     details = [f["detail"] for f in findings]
     return make_check(
-        "DOC-004", "docker", "Containers using --net=host or --pid=host", STATUS_WARNING,
+        "DOC-004",
+        "docker",
+        "Containers using --net=host or --pid=host",
+        STATUS_WARNING,
         "Detects containers that share the host network or PID namespace, removing key isolation boundaries.",
         "Host network/PID sharing lets a container sniff all host traffic or see and signal host processes, weakening isolation.",
         "docker inspect --format '{{.HostConfig.NetworkMode}} {{.HostConfig.PidMode}}' <id>",
@@ -301,7 +353,10 @@ def _check_root_no_new_privs() -> dict:
                 findings.append(f)
     if not findings:
         return make_check(
-            "DOC-005", "docker", "Containers running as root without no-new-privileges", STATUS_PASS,
+            "DOC-005",
+            "docker",
+            "Containers running as root without no-new-privileges",
+            STATUS_PASS,
             "Checks containers running as UID 0 that lack the no-new-privileges security option, which prevents privilege escalation.",
             "A root process without no-new-privileges can gain more privileges via setuid/setgid binaries or file capabilities, aiding escape.",
             "docker inspect --format '{{.Config.User}} {{.HostConfig.SecurityOpt}}' <id>",
@@ -310,7 +365,10 @@ def _check_root_no_new_privs() -> dict:
         )
     details = [f["detail"] for f in findings]
     return make_check(
-        "DOC-005", "docker", "Containers running as root without no-new-privileges", STATUS_WARNING,
+        "DOC-005",
+        "docker",
+        "Containers running as root without no-new-privileges",
+        STATUS_WARNING,
         "Checks containers running as UID 0 that lack the no-new-privileges security option, which prevents privilege escalation.",
         "A root process without no-new-privileges can gain more privileges via setuid/setgid binaries or file capabilities, aiding escape.",
         "docker inspect --format '{{.Config.User}} {{.HostConfig.SecurityOpt}}' <id>",
@@ -332,7 +390,10 @@ def _check_added_capabilities() -> dict:
                 findings.append(f)
     if not findings:
         return make_check(
-            "DOC-006", "docker", "Containers with added dangerous capabilities", STATUS_PASS,
+            "DOC-006",
+            "docker",
+            "Containers with added dangerous capabilities",
+            STATUS_PASS,
             "Checks whether containers add capabilities such as SYS_ADMIN, NET_ADMIN, SYS_PTRACE, or ALL beyond the default set.",
             "Added capabilities like SYS_ADMIN or NET_ADMIN can allow a container to modify host network settings or access host devices, increasing escape risk.",
             "docker inspect --format '{{.HostConfig.CapAdd}}' <id>",
@@ -341,7 +402,10 @@ def _check_added_capabilities() -> dict:
         )
     details = [f["detail"] for f in findings]
     return make_check(
-        "DOC-006", "docker", "Containers with added dangerous capabilities", STATUS_WARNING,
+        "DOC-006",
+        "docker",
+        "Containers with added dangerous capabilities",
+        STATUS_WARNING,
         "Checks whether containers add capabilities such as SYS_ADMIN, NET_ADMIN, SYS_PTRACE, or ALL beyond the default set.",
         "Added capabilities like SYS_ADMIN or NET_ADMIN can allow a container to modify host network settings or access host devices, increasing escape risk.",
         "docker inspect --format '{{.HostConfig.CapAdd}}' <id>",
@@ -363,7 +427,10 @@ def _check_sensitive_mounts() -> dict:
                 findings.append(f)
     if not findings:
         return make_check(
-            "DOC-007", "docker", "Writable host bind mounts of sensitive paths", STATUS_PASS,
+            "DOC-007",
+            "docker",
+            "Writable host bind mounts of sensitive paths",
+            STATUS_PASS,
             "Checks whether containers mount sensitive host paths such as /, /etc, /root, /home, /boot, /proc, /sys, /var/run/docker.sock, or /var/lib/docker in read-write mode.",
             "Writable mounts of sensitive host paths can expose host files to the container or allow the container to modify critical host configuration.",
             "docker inspect --format '{{range .Mounts}}{{.Source}} {{.RW}}{{end}}' <id>",
@@ -372,7 +439,10 @@ def _check_sensitive_mounts() -> dict:
         )
     details = [f["detail"] for f in findings]
     return make_check(
-        "DOC-007", "docker", "Writable host bind mounts of sensitive paths", STATUS_WARNING,
+        "DOC-007",
+        "docker",
+        "Writable host bind mounts of sensitive paths",
+        STATUS_WARNING,
         "Checks whether containers mount sensitive host paths such as /, /etc, /root, /home, /boot, /proc, /sys, /var/run/docker.sock, or /var/lib/docker in read-write mode.",
         "Writable mounts of sensitive host paths can expose host files to the container or allow the container to modify critical host configuration.",
         "docker inspect --format '{{range .Mounts}}{{.Source}} {{.RW}}{{end}}' <id>",
@@ -385,16 +455,29 @@ def _check_sensitive_mounts() -> dict:
 
 def run_checks() -> list[dict]:
     checks = []
-    for func in (_check_docker_installed, _check_privileged, _check_docker_sock, _check_host_namespaces, _check_root_no_new_privs, _check_added_capabilities, _check_sensitive_mounts):
+    for func in (
+        _check_docker_installed,
+        _check_privileged,
+        _check_docker_sock,
+        _check_host_namespaces,
+        _check_root_no_new_privs,
+        _check_added_capabilities,
+        _check_sensitive_mounts,
+    ):
         try:
             checks.append(func())
         except Exception as exc:
             cid = func.__doc__.strip() if func.__doc__ else "DOC-ERR"
             log.exception("Docker check %s failed", cid)
-            checks.append(skipped_check(
-                cid, "docker", func.__doc__ or "Docker check",
-                "An internal check for Docker runtime security.",
-                "An error prevented this Docker check from completing.",
-                "internal", str(exc),
-            ))
+            checks.append(
+                skipped_check(
+                    cid,
+                    "docker",
+                    func.__doc__ or "Docker check",
+                    "An internal check for Docker runtime security.",
+                    "An error prevented this Docker check from completing.",
+                    "internal",
+                    str(exc),
+                )
+            )
     return checks

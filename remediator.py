@@ -1,28 +1,30 @@
-import os
-import sys
-import json
-import time
-import stat
 import difflib
-import shutil
-import shlex
-import subprocess
-import threading
+import json
 import logging
+import os
 import re
+import shlex
+import shutil
+import stat
+import subprocess
 import tempfile
+import threading
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+import deadman
+
 logger = logging.getLogger("securitywizard")
 
-import deadman
 
 def _now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+
 def _snap_id(rid):
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + rid
+
 
 ACTIONS = {}
 for _mod in ("actions_network", "actions_ssh", "actions_system"):
@@ -38,7 +40,9 @@ _REMEDIATION_ID_RE = re.compile(r"^[A-Z]{3}-\d{3}$")
 def _validate_remediation_id(rid: str) -> bool:
     return bool(_REMEDIATION_ID_RE.match(rid)) and rid in ACTIONS
 
+
 _lock = threading.Lock()
+
 
 def _is_root():
     try:
@@ -46,14 +50,18 @@ def _is_root():
     except AttributeError:
         return False
 
+
 def _drun():
     return os.environ.get("SECURITYWIZARD_DRY_RUN_ONLY", "") == "1"
+
 
 def _allow_nonroot():
     return os.environ.get("SECURITYWIZARD_ALLOW_NONROOT", "") == "1"
 
+
 def _bdir():
     return os.environ.get("SECURITYWIZARD_BACKUP_DIR", "/var/backups/securitywizard")
+
 
 def _run_cmd(args: List[str], timeout: float = 120.0) -> Tuple[int, str, str]:
     try:
@@ -66,6 +74,7 @@ def _run_cmd(args: List[str], timeout: float = 120.0) -> Tuple[int, str, str]:
     except Exception as e:
         logger.exception("Unexpected error running command %s", " ".join(args))
         return 1, "", str(e)
+
 
 def _file_snapshot(path, snap_dir):
     try:
@@ -91,6 +100,7 @@ def _file_snapshot(path, snap_dir):
         "uid": st.st_uid,
         "gid": st.st_gid,
     }
+
 
 def _atomic_write(path: str, content: str, orig_stat=None) -> None:
     d = os.path.dirname(path) or "."
@@ -127,6 +137,7 @@ def _run_validators(validators: List[List[str]], runner) -> List[str]:
             failures.append(" ".join(cmd) + " rc=" + str(rc) + (" " + se if se else ""))
     return failures
 
+
 def _get_plan(rid: str) -> Optional[dict]:
     if rid not in ACTIONS:
         return None
@@ -154,6 +165,7 @@ def _check_idempotent(plan: dict) -> bool:
         if stat.S_IMODE(st.st_mode) != pc["mode"]:
             return False
     return True
+
 
 def preview(remediation_id: str) -> dict:
     out = {
@@ -190,8 +202,9 @@ def preview(remediation_id: str) -> dict:
                     old = f.read()
             except (OSError, IOError):
                 old = ""
-            diff = list(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
-                                             fromfile="current", tofile="proposed"))
+            diff = list(
+                difflib.unified_diff(old.splitlines(True), new.splitlines(True), fromfile="current", tofile="proposed")
+            )
             out["diffs"].append({"path": p, "before": old, "after": new, "unified_diff": "".join(diff)})
         for pc in plan.get("perm_changes", []):
             p = pc["path"]
@@ -212,8 +225,8 @@ def preview(remediation_id: str) -> dict:
         out["blocked_reason"] = str(e)
     return out
 
-def apply(remediation_id: str, confirm: bool = False, runner=None,
-          precondition=None) -> dict:
+
+def apply(remediation_id: str, confirm: bool = False, runner=None, precondition=None) -> dict:
     """Apply a remediation.
 
     *runner* is an optional callable ``(args: List[str]) -> (rc, stdout, stderr)``
@@ -259,22 +272,25 @@ def apply(remediation_id: str, confirm: bool = False, runner=None,
         with _lock:
             snap_dir = os.path.join(_bdir(), _snap_id(remediation_id))
             os.makedirs(snap_dir, exist_ok=True)
-            manifest = {"snapshot_id": os.path.basename(snap_dir), "created": _now_iso(),
-                        "remediation_id": remediation_id, "title": info.get("title", ""),
-                        "files": [], "inverse_commands": plan.get("inverse_commands", [])}
+            manifest = {
+                "snapshot_id": os.path.basename(snap_dir),
+                "created": _now_iso(),
+                "remediation_id": remediation_id,
+                "title": info.get("title", ""),
+                "files": [],
+                "inverse_commands": plan.get("inverse_commands", []),
+            }
             for fc in plan.get("file_changes", []):
                 p = fc["path"]
                 entry = _file_snapshot(p, snap_dir)
                 if entry is None:
-                    entry = {"path": p, "existed": False, "backup_file": None,
-                             "mode": None, "uid": None, "gid": None}
+                    entry = {"path": p, "existed": False, "backup_file": None, "mode": None, "uid": None, "gid": None}
                 manifest["files"].append(entry)
             for pc in plan.get("perm_changes", []):
                 p = pc["path"]
                 entry = _file_snapshot(p, snap_dir)
                 if entry is None:
-                    entry = {"path": p, "existed": False, "backup_file": None,
-                             "mode": None, "uid": None, "gid": None}
+                    entry = {"path": p, "existed": False, "backup_file": None, "mode": None, "uid": None, "gid": None}
                 manifest["files"].append(entry)
             with open(os.path.join(snap_dir, "manifest.json"), "w") as f:
                 json.dump(manifest, f, indent=2)
@@ -320,6 +336,7 @@ def apply(remediation_id: str, confirm: bool = False, runner=None,
         out["message"] = str(e)
     return out
 
+
 def list_backups():
     out = []
     try:
@@ -333,14 +350,21 @@ def list_backups():
             try:
                 with open(mpath) as f:
                     m = json.load(f)
-                out.append({"snapshot_id": name, "created": m.get("created", ""),
-                            "remediation_id": m.get("remediation_id", ""),
-                            "title": m.get("title", ""), "files": [e["path"] for e in m.get("files", [])]})
+                out.append(
+                    {
+                        "snapshot_id": name,
+                        "created": m.get("created", ""),
+                        "remediation_id": m.get("remediation_id", ""),
+                        "title": m.get("title", ""),
+                        "files": [e["path"] for e in m.get("files", [])],
+                    }
+                )
             except (json.JSONDecodeError, OSError):
                 pass
     except Exception:
         pass
     return out
+
 
 def rollback(snapshot_id):
     out = {"ok": False, "message": "", "restored": []}

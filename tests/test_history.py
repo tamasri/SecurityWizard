@@ -2,7 +2,6 @@ import json
 import os
 import sys
 import uuid
-from datetime import datetime, timezone
 from typing import Any, Dict
 
 import pytest
@@ -96,7 +95,9 @@ def test_load_scan_invalid_id(hist_dir):
 
 def test_diff_scans_new_findings():
     old = _make_result("old", "2024-01-01T00:00:00+00:00", [_check("c1", "PASS")], score_total=80)
-    new = _make_result("new", "2024-01-02T00:00:00+00:00", [_check("c1", "PASS"), _check("c2", "WARNING")], score_total=70)
+    new = _make_result(
+        "new", "2024-01-02T00:00:00+00:00", [_check("c1", "PASS"), _check("c2", "WARNING")], score_total=70
+    )
     diff = history.diff_scans(old, new)
     assert diff["new_findings"] == ["c2"]
     assert diff["resolved"] == []
@@ -104,7 +105,9 @@ def test_diff_scans_new_findings():
 
 
 def test_diff_scans_resolved():
-    old = _make_result("old", "2024-01-01T00:00:00+00:00", [_check("c1", "PASS"), _check("c2", "CRITICAL")], score_total=70)
+    old = _make_result(
+        "old", "2024-01-01T00:00:00+00:00", [_check("c1", "PASS"), _check("c2", "CRITICAL")], score_total=70
+    )
     new = _make_result("new", "2024-01-02T00:00:00+00:00", [_check("c1", "PASS")], score_total=85)
     diff = history.diff_scans(old, new)
     assert diff["new_findings"] == []

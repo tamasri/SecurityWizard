@@ -23,7 +23,7 @@
       'backups.rollback': 'Roll back', 'backups.confirm': 'Restore the files from this backup?',
       'common.close': 'Close', 'common.copy': 'Copy', 'common.copied': 'Copied',
       'detail.what': 'What it checks', 'detail.risk': 'Why it matters', 'detail.current': 'Current value', 'detail.recommended': 'Recommended value',
-      'detail.evidence': 'Evidence', 'detail.command': 'Command used', 'detail.manual': 'Manual command', 'detail.refs': 'References',
+      'detail.evidence': 'Evidence', 'detail.accepted': 'Accepted risk (from the configuration)', 'detail.command': 'Command used', 'detail.manual': 'Manual command', 'detail.refs': 'References',
       'fix.title': 'Fix preview', 'fix.confirm': 'I reviewed the changes and want to apply them.', 'fix.apply': 'Apply fix', 'fix.keep': 'Keep this change',
       'fix.blocked': 'This fix cannot be applied', 'fix.warnings': 'Warnings', 'fix.commands': 'Commands that will run', 'fix.files': 'File changes',
       'fix.perms': 'Permission changes', 'fix.noChanges': 'No file or command changes.', 'fix.result': 'Result', 'fix.applied': 'Applied. A backup was created.',
@@ -55,7 +55,7 @@
       'backups.rollback': 'تراجع', 'backups.confirm': 'استعادة الملفات من هذه النسخة؟',
       'common.close': 'إغلاق', 'common.copy': 'نسخ', 'common.copied': 'تم النسخ',
       'detail.what': 'ما الذي يفحصه', 'detail.risk': 'سبب الأهمية', 'detail.current': 'القيمة الحالية', 'detail.recommended': 'القيمة الموصى بها',
-      'detail.evidence': 'الأدلة', 'detail.command': 'الأمر المستخدم', 'detail.manual': 'الأمر اليدوي', 'detail.refs': 'المراجع',
+      'detail.evidence': 'الأدلة', 'detail.accepted': 'مخاطرة مقبولة (من ملف الإعدادات)', 'detail.command': 'الأمر المستخدم', 'detail.manual': 'الأمر اليدوي', 'detail.refs': 'المراجع',
       'fix.title': 'معاينة الإصلاح', 'fix.confirm': 'راجعت التغييرات وأريد تطبيقها.', 'fix.apply': 'طبّق الإصلاح', 'fix.keep': 'أبقِ هذا التغيير',
       'fix.blocked': 'لا يمكن تطبيق هذا الإصلاح', 'fix.warnings': 'تحذيرات', 'fix.commands': 'الأوامر التي ستُنفَّذ', 'fix.files': 'تغييرات الملفات',
       'fix.perms': 'تغييرات الصلاحيات', 'fix.noChanges': 'لا توجد تغييرات في الملفات أو الأوامر.', 'fix.result': 'النتيجة', 'fix.applied': 'تم التطبيق. أُنشئت نسخة احتياطية.',
@@ -300,6 +300,9 @@
       kv(t('detail.recommended'), c.recommended_value, true)].forEach(function (n) { if (n) { body.appendChild(n); } });
     if (c.details && c.details.length) {
       body.appendChild(el('div', { class: 'kv' }, el('span', { class: 'k', text: t('detail.evidence') }), el('pre', { class: 'code', text: c.details.join('\n') })));
+    }
+    if (c.accepted_risk) {
+      body.appendChild(kv(t('detail.accepted'), c.accepted_risk.reason + (c.accepted_risk.expires ? ' (' + c.accepted_risk.expires + ')' : '') + ' [' + c.accepted_risk.original_status + ']'));
     }
     if (c.command) { body.appendChild(el('div', { class: 'kv' }, el('span', { class: 'k', text: t('detail.command') }), el('pre', { class: 'code', text: c.command }))); }
     if (c.manual_command) {

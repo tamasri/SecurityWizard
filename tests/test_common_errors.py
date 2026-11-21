@@ -1,13 +1,18 @@
-import sys
-import os
 import logging
-import pytest
+import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from common import (
-    STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED,
-    CmdResult, run_cmd, make_check, skipped_check, read_text, is_root,
+    STATUS_INFO,
+    STATUS_PASS,
+    STATUS_SKIPPED,
+    is_root,
+    make_check,
+    read_text,
+    run_cmd,
+    skipped_check,
 )
 
 
@@ -67,8 +72,12 @@ class TestCmdResult:
 class TestSkippedCheck:
     def test_skipped_reason_in_details(self):
         c = skipped_check(
-            id="T-1", category="ssh", title="Test",
-            what_it_checks="w", risk="r", command="cmd",
+            id="T-1",
+            category="ssh",
+            title="Test",
+            what_it_checks="w",
+            risk="r",
+            command="cmd",
             reason="FileNotFoundError: [Errno 2] /etc/ssh/sshd_config",
         )
         assert c["status"] == STATUS_SKIPPED
@@ -99,16 +108,26 @@ class TestMakeCheck:
     def test_invalid_status_defaults_to_info(self, caplog):
         with caplog.at_level(logging.WARNING, logger="securitywizard"):
             c = make_check(
-                id="T-2", category="network", title="Test",
-                status="BOGUS", what_it_checks="w", risk="r", command="cmd",
+                id="T-2",
+                category="network",
+                title="Test",
+                status="BOGUS",
+                what_it_checks="w",
+                risk="r",
+                command="cmd",
             )
         assert c["status"] == STATUS_INFO
         assert any("Unknown status" in r.message for r in caplog.records)
 
     def test_valid_status_preserved(self):
         c = make_check(
-            id="T-3", category="network", title="Test",
-            status=STATUS_PASS, what_it_checks="w", risk="r", command="cmd",
+            id="T-3",
+            category="network",
+            title="Test",
+            status=STATUS_PASS,
+            what_it_checks="w",
+            risk="r",
+            command="cmd",
         )
         assert c["status"] == STATUS_PASS
 

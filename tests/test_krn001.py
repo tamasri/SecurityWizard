@@ -1,24 +1,28 @@
 """Tests for KRN-001 rp_filter check with Docker/multi-homed detection."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
 import checks_kernel
-from common import STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL
+from common import STATUS_CRITICAL, STATUS_PASS, STATUS_WARNING
 
 
 def _mock_run_cmd(rc, out="", err=""):
     """Create a mock run_cmd that returns fixed values."""
+
     def _run_cmd(args, timeout=20):
         return rc, out, err
+
     return _run_cmd
 
 
 def _mock_sysctl_value(key, value):
     """Create a mock run_cmd that returns a specific sysctl value."""
+
     def _run_cmd(args, timeout=20):
         if args == ["sysctl", "-n", key]:
             return 0, value, ""
         return 1, "", "not found"
+
     return _run_cmd
 
 
@@ -31,9 +35,11 @@ class TestKRN001DockerHost:
         """rp_filter=2 should be PASS on a Docker host."""
         mock_isdir.side_effect = lambda path: path == "/var/lib/docker"
         mock_run_cmd.side_effect = lambda args, timeout=20: (
-            (0, "2", "") if args == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"] else
-            (0, "2", "") if args == ["sysctl", "-n", "net.ipv4.conf.default.rp_filter"] else
-            (1, "", "not found")
+            (0, "2", "")
+            if args == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"]
+            else (0, "2", "")
+            if args == ["sysctl", "-n", "net.ipv4.conf.default.rp_filter"]
+            else (1, "", "not found")
         )
         result = checks_kernel._check_rpf()
         assert result["status"] == STATUS_PASS
@@ -46,9 +52,11 @@ class TestKRN001DockerHost:
         """rp_filter=1 should also be PASS on a Docker host (acceptable)."""
         mock_isdir.side_effect = lambda path: path == "/var/lib/docker"
         mock_run_cmd.side_effect = lambda args, timeout=20: (
-            (0, "1", "") if args == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"] else
-            (0, "1", "") if args == ["sysctl", "-n", "net.ipv4.conf.default.rp_filter"] else
-            (1, "", "not found")
+            (0, "1", "")
+            if args == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"]
+            else (0, "1", "")
+            if args == ["sysctl", "-n", "net.ipv4.conf.default.rp_filter"]
+            else (1, "", "not found")
         )
         result = checks_kernel._check_rpf()
         assert result["status"] == STATUS_PASS
@@ -60,9 +68,11 @@ class TestKRN001DockerHost:
         """rp_filter=0 should be WARNING on a Docker host."""
         mock_isdir.side_effect = lambda path: path == "/var/lib/docker"
         mock_run_cmd.side_effect = lambda args, timeout=20: (
-            (0, "0", "") if args == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"] else
-            (0, "0", "") if args == ["sysctl", "-n", "net.ipv4.conf.default.rp_filter"] else
-            (1, "", "not found")
+            (0, "0", "")
+            if args == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"]
+            else (0, "0", "")
+            if args == ["sysctl", "-n", "net.ipv4.conf.default.rp_filter"]
+            else (1, "", "not found")
         )
         result = checks_kernel._check_rpf()
         assert result["status"] == STATUS_WARNING
@@ -78,9 +88,11 @@ class TestKRN001PlainHost:
         """rp_filter=1 should be PASS on a plain host."""
         mock_isdir.return_value = False
         mock_run_cmd.side_effect = lambda args, timeout=20: (
-            (0, "1", "") if args == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"] else
-            (0, "1", "") if args == ["sysctl", "-n", "net.ipv4.conf.default.rp_filter"] else
-            (1, "", "not found")
+            (0, "1", "")
+            if args == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"]
+            else (0, "1", "")
+            if args == ["sysctl", "-n", "net.ipv4.conf.default.rp_filter"]
+            else (1, "", "not found")
         )
         result = checks_kernel._check_rpf()
         assert result["status"] == STATUS_PASS
@@ -92,9 +104,11 @@ class TestKRN001PlainHost:
         """rp_filter=2 should be WARNING on a plain host."""
         mock_isdir.return_value = False
         mock_run_cmd.side_effect = lambda args, timeout=20: (
-            (0, "2", "") if args == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"] else
-            (0, "2", "") if args == ["sysctl", "-n", "net.ipv4.conf.default.rp_filter"] else
-            (1, "", "not found")
+            (0, "2", "")
+            if args == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"]
+            else (0, "2", "")
+            if args == ["sysctl", "-n", "net.ipv4.conf.default.rp_filter"]
+            else (1, "", "not found")
         )
         result = checks_kernel._check_rpf()
         assert result["status"] == STATUS_WARNING
@@ -106,9 +120,11 @@ class TestKRN001PlainHost:
         """rp_filter=0 should be CRITICAL on a plain host."""
         mock_isdir.return_value = False
         mock_run_cmd.side_effect = lambda args, timeout=20: (
-            (0, "0", "") if args == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"] else
-            (0, "0", "") if args == ["sysctl", "-n", "net.ipv4.conf.default.rp_filter"] else
-            (1, "", "not found")
+            (0, "0", "")
+            if args == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"]
+            else (0, "0", "")
+            if args == ["sysctl", "-n", "net.ipv4.conf.default.rp_filter"]
+            else (1, "", "not found")
         )
         result = checks_kernel._check_rpf()
         assert result["status"] == STATUS_CRITICAL
@@ -123,15 +139,20 @@ class TestRemediationPlanDocker:
     def test_sysctl_baseline_docker_contains_rp_filter_2(self, mock_isdir, mock_run_cmd):
         """The sysctl_baseline plan on a Docker host must set rp_filter=2."""
         import actions_system
+
         mock_isdir.side_effect = lambda path: path == "/var/lib/docker"
         mock_run_cmd.side_effect = lambda args, timeout=20: (
-            (1, "", "not found") if args == ["which", "docker"] else
-            (1, "", "not found") if args == ["which", "kubelet"] else
-            (1, "", "not found") if args == ["which", "wg"] else
-            (0, "default via 10.0.0.1 dev eth0\n", "") if args == ["ip", "route", "show", "default"] else
-            (0, "default via 10.0.0.1 dev eth0\n10.0.0.0/24 dev eth0 proto kernel scope link src 10.0.0.5\n", "")
-            if args == ["ip", "-o", "-4", "route", "show"] else
             (1, "", "not found")
+            if args == ["which", "docker"]
+            else (1, "", "not found")
+            if args == ["which", "kubelet"]
+            else (1, "", "not found")
+            if args == ["which", "wg"]
+            else (0, "default via 10.0.0.1 dev eth0\n", "")
+            if args == ["ip", "route", "show", "default"]
+            else (0, "default via 10.0.0.1 dev eth0\n10.0.0.0/24 dev eth0 proto kernel scope link src 10.0.0.5\n", "")
+            if args == ["ip", "-o", "-4", "route", "show"]
+            else (1, "", "not found")
         )
         plan = actions_system._build_sysctl_baseline()
         assert "blockers" not in plan or not plan["blockers"]
@@ -150,15 +171,20 @@ class TestRemediationPlanPlain:
     def test_sysctl_baseline_plain_contains_rp_filter_1(self, mock_isdir, mock_run_cmd):
         """The sysctl_baseline plan on a plain host must set rp_filter=1."""
         import actions_system
+
         mock_isdir.return_value = False
         mock_run_cmd.side_effect = lambda args, timeout=20: (
-            (1, "", "not found") if args == ["which", "docker"] else
-            (1, "", "not found") if args == ["which", "kubelet"] else
-            (1, "", "not found") if args == ["which", "wg"] else
-            (0, "default via 10.0.0.1 dev eth0\n", "") if args == ["ip", "route", "show", "default"] else
-            (0, "default via 10.0.0.1 dev eth0\n10.0.0.0/24 dev eth0 proto kernel scope link src 10.0.0.5\n", "")
-            if args == ["ip", "-o", "-4", "route", "show"] else
             (1, "", "not found")
+            if args == ["which", "docker"]
+            else (1, "", "not found")
+            if args == ["which", "kubelet"]
+            else (1, "", "not found")
+            if args == ["which", "wg"]
+            else (0, "default via 10.0.0.1 dev eth0\n", "")
+            if args == ["ip", "route", "show", "default"]
+            else (0, "default via 10.0.0.1 dev eth0\n10.0.0.0/24 dev eth0 proto kernel scope link src 10.0.0.5\n", "")
+            if args == ["ip", "-o", "-4", "route", "show"]
+            else (1, "", "not found")
         )
         plan = actions_system._build_sysctl_baseline()
         assert "blockers" not in plan or not plan["blockers"]

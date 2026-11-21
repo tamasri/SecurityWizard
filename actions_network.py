@@ -12,18 +12,19 @@ plan with a non-empty "blockers" list so the anti-lockout guard can refuse the a
 
 from __future__ import annotations
 
+import logging
 import os
 import re
-import logging
+
 from common import read_text, run_cmd
 from sshd_effective import listening_ssh_ports
-from firewall import detect_firewall
 
 logger = logging.getLogger("securitywizard")
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def _detect_ssh_ports() -> list[int]:
     """Return a list of TCP ports that sshd listens on.  Returns [] on failure."""
@@ -64,6 +65,7 @@ def _current_user6_rules() -> str:
 # ---------------------------------------------------------------------------
 # ufw_baseline
 # ---------------------------------------------------------------------------
+
 
 def _build_ufw_baseline() -> dict:
     blockers: list[str] = []

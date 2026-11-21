@@ -1,8 +1,8 @@
-import os
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 try:
     import tomllib
@@ -86,7 +86,9 @@ class Config:
                     if date.today() > exp_date:
                         continue
                 except ValueError:
-                    logger.warning("Invalid expires date '%s' for risk %s, treating as no expiry", risk.expires, check_id)
+                    logger.warning(
+                        "Invalid expires date '%s' for risk %s, treating as no expiry", risk.expires, check_id
+                    )
             return risk
         return None
 
@@ -256,7 +258,14 @@ def _parse_config(data: Dict[str, Any]) -> Config:
         raise ConfigError("'allow' must be a table")
 
     for key in allow:
-        if key not in ("listeners", "docker_sock_containers", "docker_public_ports", "docker_privileged", "sudo_rules", "suid_files"):
+        if key not in (
+            "listeners",
+            "docker_sock_containers",
+            "docker_public_ports",
+            "docker_privileged",
+            "sudo_rules",
+            "suid_files",
+        ):
             logger.warning("Unknown key in [allow]: %s", key)
 
     listeners = allow.get("listeners", [])

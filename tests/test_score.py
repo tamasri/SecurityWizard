@@ -1,6 +1,5 @@
-import pytest
+from common import STATUS_CRITICAL, STATUS_INFO, STATUS_PASS, STATUS_SKIPPED, STATUS_WARNING
 from scanner import compute_score
-from common import STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED
 
 
 def _check(status, id="CHK-1"):
@@ -11,8 +10,11 @@ def test_empty_results_score_none():
     result = compute_score([])
     assert result["score"] is None
     assert result["counts"] == {
-        STATUS_PASS: 0, STATUS_WARNING: 0, STATUS_CRITICAL: 0,
-        STATUS_INFO: 0, STATUS_SKIPPED: 0
+        STATUS_PASS: 0,
+        STATUS_WARNING: 0,
+        STATUS_CRITICAL: 0,
+        STATUS_INFO: 0,
+        STATUS_SKIPPED: 0,
     }
     assert result["excluded"] == 0
     assert "No scored checks" in result["formula"]

@@ -7,20 +7,17 @@ Implements the 'network' category checks:
   NET-004  Docker published ports bypassing UFW (DOCKER-USER chain)
 """
 
-import re
 import logging
+import re
 
 from common import (
-    run_cmd,
-    read_text,
-    is_root,
-    make_check,
-    skipped_check,
-    STATUS_PASS,
-    STATUS_WARNING,
     STATUS_CRITICAL,
     STATUS_INFO,
+    STATUS_PASS,
     STATUS_SKIPPED,
+    make_check,
+    run_cmd,
+    skipped_check,
 )
 from config import get_config
 
@@ -88,9 +85,21 @@ def _is_dangerous_port(port: str) -> bool:
     except (ValueError, TypeError):
         return False
     dangerous_ports = {
-        2375, 2376, 3306, 5432, 6379,
-        27017, 9200, 9300, 11211, 5984, 1433, 3389, 5900,
-        2379, 10250,
+        2375,
+        2376,
+        3306,
+        5432,
+        6379,
+        27017,
+        9200,
+        9300,
+        11211,
+        5984,
+        1433,
+        3389,
+        5900,
+        2379,
+        10250,
     }
     return p in dangerous_ports
 
@@ -108,7 +117,8 @@ def check_net_001():
 
     if rc == 127:
         return skipped_check(
-            "NET-001", "network",
+            "NET-001",
+            "network",
             "Listening TCP/UDP sockets (ss -tulnpH)",
             "Enumerates every TCP and UDP socket currently in LISTEN state, "
             "showing the protocol, local address and port, peer address, "
@@ -123,7 +133,8 @@ def check_net_001():
 
     if rc != 0:
         return skipped_check(
-            "NET-001", "network",
+            "NET-001",
+            "network",
             "Listening TCP/UDP sockets (ss -tulnpH)",
             "Enumerates every TCP and UDP socket currently in LISTEN state, "
             "showing the protocol, local address and port, peer address, "
@@ -150,7 +161,8 @@ def check_net_001():
 
     current_value = f"{len(sockets)} listening socket(s)"
     return make_check(
-        "NET-001", "network",
+        "NET-001",
+        "network",
         "Listening TCP/UDP sockets (ss -tulnpH)",
         STATUS_INFO,
         "Enumerates every TCP and UDP socket currently in LISTEN state, "
@@ -177,7 +189,8 @@ def check_net_002():
 
     if rc == 127:
         return skipped_check(
-            "NET-002", "network",
+            "NET-002",
+            "network",
             "Dangerous services exposed on all interfaces (0.0.0.0 / ::)",
             "Scans all listening sockets and flags well-known backend services "
             "(PostgreSQL, MySQL, Redis, MongoDB, Elasticsearch, Memcached, CouchDB, "
@@ -193,7 +206,8 @@ def check_net_002():
 
     if rc != 0:
         return skipped_check(
-            "NET-002", "network",
+            "NET-002",
+            "network",
             "Dangerous services exposed on all interfaces (0.0.0.0 / ::)",
             "Scans all listening sockets and flags well-known backend services "
             "(PostgreSQL, MySQL, Redis, MongoDB, Elasticsearch, Memcached, CouchDB, "
@@ -251,7 +265,8 @@ def check_net_002():
         recommended = "Keep backend services bound to 127.0.0.1."
 
     return make_check(
-        "NET-002", "network",
+        "NET-002",
+        "network",
         "Dangerous services exposed on all interfaces (0.0.0.0 / ::)",
         status,
         "Scans all listening sockets and flags well-known backend services "
@@ -296,7 +311,8 @@ def check_net_003():
         manual_cmd = "apt install ufw && ufw default deny incoming && ufw default allow outgoing && ufw enable"
 
     return make_check(
-        "NET-003", "network",
+        "NET-003",
+        "network",
         "Firewall backend detection and INPUT chain policy",
         status,
         "Detects the active firewall backend (nftables, iptables, UFW, or firewalld) "
@@ -327,7 +343,8 @@ def check_net_004():
 
     if status == STATUS_SKIPPED:
         return make_check(
-            "NET-004", "network",
+            "NET-004",
+            "network",
             "Docker published ports bypassing UFW (DOCKER-USER chain)",
             STATUS_PASS,
             "Docker is not installed on this system, so there are no container "
@@ -349,7 +366,8 @@ def check_net_004():
     manual_cmd = "iptables -I DOCKER-USER -j RETURN -m comment --comment 'SecurityWizard: allow established' && iptables -I DOCKER-USER -j ACCEPT -m state --state ESTABLISHED,RELATED && iptables -I DOCKER-USER -j DROP -m comment --comment 'SecurityWizard: drop all other'"
 
     return make_check(
-        "NET-004", "network",
+        "NET-004",
+        "network",
         "Docker published ports bypassing UFW (DOCKER-USER chain)",
         status,
         "Checks whether Docker's DOCKER-USER iptables chain contains "
@@ -376,51 +394,63 @@ def run_checks() -> list:
     try:
         checks.append(check_net_001())
     except Exception as e:
-        checks.append(skipped_check(
-            "NET-001", "network",
-            "Listening TCP/UDP sockets (ss -tulnpH)",
-            "Enumerates every TCP and UDP socket currently in LISTEN state.",
-            "Without a socket inventory, exposed services go unnoticed.",
-            "ss -tulnpH",
-            f"Unexpected error: {e}",
-        ))
+        checks.append(
+            skipped_check(
+                "NET-001",
+                "network",
+                "Listening TCP/UDP sockets (ss -tulnpH)",
+                "Enumerates every TCP and UDP socket currently in LISTEN state.",
+                "Without a socket inventory, exposed services go unnoticed.",
+                "ss -tulnpH",
+                f"Unexpected error: {e}",
+            )
+        )
 
     try:
         checks.append(check_net_002())
     except Exception as e:
-        checks.append(skipped_check(
-            "NET-002", "network",
-            "Dangerous services exposed on all interfaces (0.0.0.0 / ::)",
-            "Flags backend services bound to all interfaces instead of loopback.",
-            "Exposed databases and caches are reachable from any network host.",
-            "ss -tulnpH",
-            f"Unexpected error: {e}",
-        ))
+        checks.append(
+            skipped_check(
+                "NET-002",
+                "network",
+                "Dangerous services exposed on all interfaces (0.0.0.0 / ::)",
+                "Flags backend services bound to all interfaces instead of loopback.",
+                "Exposed databases and caches are reachable from any network host.",
+                "ss -tulnpH",
+                f"Unexpected error: {e}",
+            )
+        )
 
     try:
         checks.append(check_net_003())
     except Exception as e:
-        checks.append(skipped_check(
-            "NET-003", "network",
-            "UFW firewall status and default policies",
-            "Checks UFW active state and default incoming policy.",
-            "Without default-deny incoming, all open ports are reachable.",
-            "ufw status verbose",
-            f"Unexpected error: {e}",
-            remediation_id="ufw_baseline",
-        ))
+        checks.append(
+            skipped_check(
+                "NET-003",
+                "network",
+                "UFW firewall status and default policies",
+                "Checks UFW active state and default incoming policy.",
+                "Without default-deny incoming, all open ports are reachable.",
+                "ufw status verbose",
+                f"Unexpected error: {e}",
+                remediation_id="ufw_baseline",
+            )
+        )
 
     try:
         checks.append(check_net_004())
     except Exception as e:
-        checks.append(skipped_check(
-            "NET-004", "network",
-            "Docker published ports bypassing UFW (DOCKER-USER chain)",
-            "Checks if Docker published ports bypass UFW via DOCKER-USER chain.",
-            "Container ports can bypass firewall rules entirely.",
-            "iptables -L DOCKER-USER -n -v; docker ps",
-            f"Unexpected error: {e}",
-            remediation_id="docker_user_isolation",
-        ))
+        checks.append(
+            skipped_check(
+                "NET-004",
+                "network",
+                "Docker published ports bypassing UFW (DOCKER-USER chain)",
+                "Checks if Docker published ports bypass UFW via DOCKER-USER chain.",
+                "Container ports can bypass firewall rules entirely.",
+                "iptables -L DOCKER-USER -n -v; docker ps",
+                f"Unexpected error: {e}",
+                remediation_id="docker_user_isolation",
+            )
+        )
 
     return checks

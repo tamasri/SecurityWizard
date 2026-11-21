@@ -1,6 +1,6 @@
 """Tests that chattr +a remediations have been removed from LOG-001/LOG-002."""
+
 import pathlib
-import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 CHECKS_LOGS = REPO_ROOT / "checks_logs.py"
@@ -22,23 +22,19 @@ def test_no_chattr_in_actions_system():
 def test_old_remediation_ids_not_registered():
     """The old chattr-based remediation ids must no longer be in the ACTIONS registry."""
     import actions_system
+
     for old_id in ("log_append_only_auth", "log_append_only_syslog"):
-        assert old_id not in actions_system.ACTIONS, (
-            f"{old_id} is still registered in ACTIONS"
-        )
+        assert old_id not in actions_system.ACTIONS, f"{old_id} is still registered in ACTIONS"
 
 
 def test_preview_old_id_returns_error():
     """Previewing an old chattr remediation id must not succeed."""
-    import actions_system
     import remediator
 
     for old_id in ("log_append_only_auth", "log_append_only_syslog"):
         result = remediator.preview(old_id)
         assert result is not None, "preview returned None"
-        assert result.get("blocked") is True, (
-            f"preview({old_id}) was not blocked: {result}"
-        )
+        assert result.get("blocked") is True, f"preview({old_id}) was not blocked: {result}"
         assert "Unknown remediation" in result.get("blocked_reason", ""), (
             f"preview({old_id}) blocked_reason does not mention Unknown remediation: {result.get('blocked_reason')}"
         )

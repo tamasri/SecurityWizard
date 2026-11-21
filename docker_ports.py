@@ -16,9 +16,9 @@ The function:
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from common import run_cmd, STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_SKIPPED
+from common import STATUS_CRITICAL, STATUS_PASS, STATUS_SKIPPED, STATUS_WARNING, run_cmd
 from config import get_config
 
 logger = logging.getLogger(__name__)
@@ -35,9 +35,7 @@ def _get_published_ports() -> List[Dict[str, Any]]:
 
     Each dict has keys: container, host_ip, host_port, container_port, protocol.
     """
-    rc, out, err = run_cmd(
-        ["docker", "ps", "--format", "{{json .}}"]
-    )
+    rc, out, err = run_cmd(["docker", "ps", "--format", "{{json .}}"])
     if rc != 0:
         logger.warning("docker ps failed: %s", err.strip())
         return []
@@ -62,23 +60,22 @@ def _get_published_ports() -> List[Dict[str, Any]]:
             if not part:
                 continue
             # Expect format like "host_ip:host_port->container_port/proto"
-            m = re.match(
-                r"^(\[?[\d.]+|\[?[\da-f:]+\]?|\*|::)?:(\d+)->(\d+)/(tcp|udp|sctp)$",
-                part
-            )
+            m = re.match(r"^(\[?[\d.]+|\[?[\da-f:]+\]?|\*|::)?:(\d+)->(\d+)/(tcp|udp|sctp)$", part)
             if m:
                 raw_ip = m.group(1) or "0.0.0.0"
                 host_ip = raw_ip.strip("[]")
                 host_port = int(m.group(2))
                 container_port = int(m.group(3))
                 protocol = m.group(4)
-                ports.append({
-                    "container": name,
-                    "host_ip": host_ip,
-                    "host_port": host_port,
-                    "container_port": container_port,
-                    "protocol": protocol,
-                })
+                ports.append(
+                    {
+                        "container": name,
+                        "host_ip": host_ip,
+                        "host_port": host_port,
+                        "container_port": container_port,
+                        "protocol": protocol,
+                    }
+                )
 
     return ports
 
@@ -151,15 +148,17 @@ def _parse_iptables_docker_user() -> List[Dict[str, Any]]:
                     comment = tokens[i].strip("'")
             i += 1
 
-        rules.append({
-            "protocol": protocol,
-            "dport": dport,
-            "ct_orig_dst_port": ct_orig_dst_port,
-            "ct_orig_dst": ct_orig_dst,
-            "interface": interface,
-            "target": target,
-            "comment": comment,
-        })
+        rules.append(
+            {
+                "protocol": protocol,
+                "dport": dport,
+                "ct_orig_dst_port": ct_orig_dst_port,
+                "ct_orig_dst": ct_orig_dst,
+                "interface": interface,
+                "target": target,
+                "comment": comment,
+            }
+        )
 
     return rules
 
@@ -237,15 +236,17 @@ def _parse_nft_docker_user() -> List[Dict[str, Any]]:
         if m:
             comment = m.group(1)
 
-        rules.append({
-            "protocol": protocol,
-            "dport": dport,
-            "ct_orig_dst_port": ct_orig_dst_port,
-            "ct_orig_dst": ct_orig_dst,
-            "interface": interface,
-            "target": target,
-            "comment": comment,
-        })
+        rules.append(
+            {
+                "protocol": protocol,
+                "dport": dport,
+                "ct_orig_dst_port": ct_orig_dst_port,
+                "ct_orig_dst": ct_orig_dst,
+                "interface": interface,
+                "target": target,
+                "comment": comment,
+            }
+        )
 
     return rules
 
@@ -362,7 +363,9 @@ def assess_docker_ports() -> Dict[str, Any]:
             "status": STATUS_WARNING,
             "current_value": f"{len(public_ports)} published port(s) on 0.0.0.0 or ::, DOCKER-USER chain not found",
             "recommended": "Ensure DOCKER-USER chain exists and contains isolation rules.",
-            "details": [f"{len(public_ports)} published port(s) on 0.0.0.0 or ::, but DOCKER-USER chain could not be parsed."],
+            "details": [
+                f"{len(public_ports)} published port(s) on 0.0.0.0 or ::, but DOCKER-USER chain could not be parsed."
+            ],
         }
 
     # Check each port

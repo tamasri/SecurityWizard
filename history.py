@@ -66,12 +66,14 @@ def list_scans() -> List[Dict[str, Any]]:
         except Exception as exc:
             logger.warning("Failed to read history file %s: %s", path, exc)
             continue
-        out.append({
-            "scan_id": sid,
-            "timestamp": scan_timestamp(data),
-            "score": scan_score(data),
-            "status_counts": scan_counts(data),
-        })
+        out.append(
+            {
+                "scan_id": sid,
+                "timestamp": scan_timestamp(data),
+                "score": scan_score(data),
+                "status_counts": scan_counts(data),
+            }
+        )
     out.sort(key=lambda x: x["timestamp"], reverse=True)
     return out
 

@@ -1,12 +1,8 @@
-import os
-import tempfile
-import pytest
 from datetime import date, timedelta
-from config import (
-    Config, ConfigError, AcceptedRisk, ListenerAllow, DockerSockAllow,
-    DockerPublicPortAllow, DockerPrivilegedAllow, SudoRuleAllow, SuidFileAllow,
-    load_config, get_config, reset_config, example_config
-)
+
+import pytest
+
+from config import Config, ConfigError, example_config, get_config, load_config, reset_config
 
 
 @pytest.fixture(autouse=True)

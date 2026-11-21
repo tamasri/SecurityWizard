@@ -1,18 +1,22 @@
 """Miscellaneous security checks: world-writable files, systemd sandboxing, TLS expiry, failed-login telemetry."""
+
 import glob
 import logging
 import os
 import re
 import socket
 import ssl
-import subprocess
-import tempfile
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
 from common import (
-    STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED,
-    make_check, skipped_check, run_cmd,
+    STATUS_CRITICAL,
+    STATUS_INFO,
+    STATUS_PASS,
+    STATUS_WARNING,
+    make_check,
+    run_cmd,
+    skipped_check,
 )
 from envdetect import detect_environment
 
@@ -21,6 +25,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _find_world_writable(timeout: float = 15.0) -> Optional[List[str]]:
     """Find world-writable files/dirs without sticky bit outside pseudo/container paths."""
@@ -156,6 +161,7 @@ def _parse_failed_logins(log_path: str = "/var/log/auth.log") -> Dict[str, int]:
 # Check functions
 # ---------------------------------------------------------------------------
 
+
 def check_world_writable() -> Dict:
     """MSC-001: World-writable files/dirs without sticky bit."""
     category = "misc"
@@ -167,14 +173,23 @@ def check_world_writable() -> Dict:
     files = _find_world_writable(timeout=15.0)
     if files is None:
         return skipped_check(
-            id="MSC-001", category=category, title=title,
-            what_it_checks=what, risk=risk, command=cmd,
+            id="MSC-001",
+            category=category,
+            title=title,
+            what_it_checks=what,
+            risk=risk,
+            command=cmd,
             reason="find command timed out or failed to execute",
         )
     if not files:
         return make_check(
-            id="MSC-001", category=category, title=title, status=STATUS_PASS,
-            what_it_checks=what, risk=risk, command=cmd,
+            id="MSC-001",
+            category=category,
+            title=title,
+            status=STATUS_PASS,
+            what_it_checks=what,
+            risk=risk,
+            command=cmd,
             current_value="No world-writable paths without sticky bit found",
             recommended_value="",
             details=["All world-writable paths have the sticky bit set or are in excluded locations."],
@@ -183,8 +198,13 @@ def check_world_writable() -> Dict:
     if len(files) > 20:
         details.append("... and {} more".format(len(files) - 20))
     return make_check(
-        id="MSC-001", category=category, title=title, status=STATUS_WARNING,
-        what_it_checks=what, risk=risk, command=cmd,
+        id="MSC-001",
+        category=category,
+        title=title,
+        status=STATUS_WARNING,
+        what_it_checks=what,
+        risk=risk,
+        command=cmd,
         current_value="{} world-writable paths without sticky bit".format(len(files)),
         recommended_value="Add sticky bit (chmod +t) or remove world-write permission",
         details=details,
@@ -201,19 +221,31 @@ def check_systemd_sandboxing() -> List[Dict]:
 
     unit_dir = "/etc/systemd/system"
     if not os.path.isdir(unit_dir):
-        return [skipped_check(
-            id="MSC-002", category=category, title=title,
-            what_it_checks=what, risk=risk, command=cmd,
-            reason="Directory /etc/systemd/system does not exist",
-        )]
+        return [
+            skipped_check(
+                id="MSC-002",
+                category=category,
+                title=title,
+                what_it_checks=what,
+                risk=risk,
+                command=cmd,
+                reason="Directory /etc/systemd/system does not exist",
+            )
+        ]
 
     unit_paths = _parse_systemd_units(unit_dir)
     if not unit_paths:
-        return [skipped_check(
-            id="MSC-002", category=category, title=title,
-            what_it_checks=what, risk=risk, command=cmd,
-            reason="No local .service unit files found in /etc/systemd/system",
-        )]
+        return [
+            skipped_check(
+                id="MSC-002",
+                category=category,
+                title=title,
+                what_it_checks=what,
+                risk=risk,
+                command=cmd,
+                reason="No local .service unit files found in /etc/systemd/system",
+            )
+        ]
 
     checks = []
     for unit_path in unit_paths:
@@ -221,27 +253,37 @@ def check_systemd_sandboxing() -> List[Dict]:
         directives = _read_unit_sandboxing(unit_path)
         missing = [k for k, v in directives.items() if not v]
         if not missing:
-            checks.append(make_check(
-                id="MSC-002", category=category,
-                title="Unit {} sandboxing".format(unit_name),
-                status=STATUS_PASS,
-                what_it_checks=what, risk=risk, command=cmd,
-                current_value="All sandboxing directives present",
-                recommended_value="",
-                details=["Unit {} has all recommended sandboxing directives.".format(unit_name)],
-            ))
+            checks.append(
+                make_check(
+                    id="MSC-002",
+                    category=category,
+                    title="Unit {} sandboxing".format(unit_name),
+                    status=STATUS_PASS,
+                    what_it_checks=what,
+                    risk=risk,
+                    command=cmd,
+                    current_value="All sandboxing directives present",
+                    recommended_value="",
+                    details=["Unit {} has all recommended sandboxing directives.".format(unit_name)],
+                )
+            )
         else:
             details = ["Missing directives in {}: {}".format(unit_name, ", ".join(missing))]
             status = STATUS_INFO if len(missing) <= 2 else STATUS_WARNING
-            checks.append(make_check(
-                id="MSC-002", category=category,
-                title="Unit {} sandboxing".format(unit_name),
-                status=status,
-                what_it_checks=what, risk=risk, command=cmd,
-                current_value="Missing: {}".format(", ".join(missing)),
-                recommended_value="Add missing directives to [Service] section",
-                details=details,
-            ))
+            checks.append(
+                make_check(
+                    id="MSC-002",
+                    category=category,
+                    title="Unit {} sandboxing".format(unit_name),
+                    status=status,
+                    what_it_checks=what,
+                    risk=risk,
+                    command=cmd,
+                    current_value="Missing: {}".format(", ".join(missing)),
+                    recommended_value="Add missing directives to [Service] section",
+                    details=details,
+                )
+            )
     return checks
 
 
@@ -255,22 +297,33 @@ def check_tls_expiry(handshake_fn: Optional[Callable] = None) -> List[Dict]:
 
     ports = _get_tls_ports()
     if not ports:
-        return [skipped_check(
-            id="MSC-003", category=category, title=title,
-            what_it_checks=what, risk=risk, command=cmd,
-            reason="No local listening TCP ports found via ss",
-        )]
+        return [
+            skipped_check(
+                id="MSC-003",
+                category=category,
+                title=title,
+                what_it_checks=what,
+                risk=risk,
+                command=cmd,
+                reason="No local listening TCP ports found via ss",
+            )
+        ]
 
     checks = []
     for port in ports:
         info = _check_tls_expiry(port, handshake_fn=handshake_fn)
         if info is None:
-            checks.append(skipped_check(
-                id="MSC-003", category=category,
-                title="TLS port {}".format(port),
-                what_it_checks=what, risk=risk, command=cmd,
-                reason="TLS handshake failed or no certificate returned for port {}".format(port),
-            ))
+            checks.append(
+                skipped_check(
+                    id="MSC-003",
+                    category=category,
+                    title="TLS port {}".format(port),
+                    what_it_checks=what,
+                    risk=risk,
+                    command=cmd,
+                    reason="TLS handshake failed or no certificate returned for port {}".format(port),
+                )
+            )
             continue
         days = info["days_to_expiry"]
         if days < 0:
@@ -289,15 +342,20 @@ def check_tls_expiry(handshake_fn: Optional[Callable] = None) -> List[Dict]:
             status = STATUS_PASS
             current = "Certificate on port {} valid for {:.1f} more days".format(port, days)
             rec = ""
-        checks.append(make_check(
-            id="MSC-003", category=category,
-            title="TLS port {}".format(port),
-            status=status,
-            what_it_checks=what, risk=risk, command=cmd,
-            current_value=current,
-            recommended_value=rec,
-            details=["Expires at: {}".format(info["expires_at"])],
-        ))
+        checks.append(
+            make_check(
+                id="MSC-003",
+                category=category,
+                title="TLS port {}".format(port),
+                status=status,
+                what_it_checks=what,
+                risk=risk,
+                command=cmd,
+                current_value=current,
+                recommended_value=rec,
+                details=["Expires at: {}".format(info["expires_at"])],
+            )
+        )
     return checks
 
 
@@ -319,8 +377,12 @@ def check_failed_logins() -> Dict:
         if fail2ban_active or crowdsec_active:
             reason += " (fail2ban/crowdsec active, failures may be blocked before logging)"
         return skipped_check(
-            id="MSC-004", category=category, title=title,
-            what_it_checks=what, risk=risk, command=cmd,
+            id="MSC-004",
+            category=category,
+            title=title,
+            what_it_checks=what,
+            risk=risk,
+            command=cmd,
             reason=reason,
         )
 
@@ -343,8 +405,13 @@ def check_failed_logins() -> Dict:
         rec = ""
 
     return make_check(
-        id="MSC-004", category=category, title=title, status=status,
-        what_it_checks=what, risk=risk, command=cmd,
+        id="MSC-004",
+        category=category,
+        title=title,
+        status=status,
+        what_it_checks=what,
+        risk=risk,
+        command=cmd,
         current_value=current,
         recommended_value=rec,
         details=details,
@@ -354,6 +421,7 @@ def check_failed_logins() -> Dict:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def run_checks() -> List[Dict]:
     """Run all miscellaneous checks and return a list of result dicts."""

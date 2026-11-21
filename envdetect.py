@@ -7,12 +7,12 @@ tests can run without touching a real system.
 
 from __future__ import annotations
 
-import os
-import sys
-import platform
 import logging
-from dataclasses import dataclass, field, asdict
-from typing import Callable, Dict, List, Optional, Any
+import os
+import platform
+import sys
+from dataclasses import asdict, dataclass, field
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("securitywizard")
 
@@ -21,6 +21,7 @@ logger = logging.getLogger("securitywizard")
 # Injectable interfaces
 # ---------------------------------------------------------------------------
 
+
 class FakeFS:
     """Minimal filesystem abstraction for injection.
 
@@ -28,6 +29,7 @@ class FakeFS:
     ``detect_environment``.  Tests build a dict of path -> content and wrap
     it in a thin adapter, or simply pass a dict itself (duck typing).
     """
+
     def path_exists(self, path: str) -> bool:
         raise NotImplementedError
 
@@ -40,6 +42,7 @@ class FakeRunner:
 
     ``run`` mirrors the signature of ``common.run_cmd``.
     """
+
     def run(self, args: List[str], timeout: float = 20.0) -> Any:
         raise NotImplementedError
 
@@ -48,6 +51,7 @@ def _default_fs() -> FakeFS:
     class _RealFS(FakeFS):
         def path_exists(self, path: str) -> bool:
             return os.path.exists(path)
+
         def read_text(self, path: str, default: str = "") -> str:
             try:
                 with open(path, "r", encoding="utf-8") as f:
@@ -55,20 +59,24 @@ def _default_fs() -> FakeFS:
             except Exception as exc:
                 logger.warning("envdetect: failed to read %s: %s", path, exc)
                 return default
+
     return _RealFS()
 
 
 def _default_runner() -> FakeRunner:
     from common import run_cmd as _run_cmd
+
     class _RealRunner(FakeRunner):
         def run(self, args: List[str], timeout: float = 20.0) -> Any:
             return _run_cmd(args, timeout=timeout)
+
     return _RealRunner()
 
 
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Environment:
@@ -99,6 +107,7 @@ class Environment:
 # ---------------------------------------------------------------------------
 # Individual probes
 # ---------------------------------------------------------------------------
+
 
 def _probe_os_release(fs: FakeFS) -> tuple:
     """Return (os_id, os_version) from /etc/os-release."""
@@ -131,7 +140,7 @@ def _probe_docker(fs: FakeFS, runner: FakeRunner) -> tuple:
     if socket_ok or binary_ok:
         result = runner.run(["docker", "ps", "-q"])
         if result.ok():
-            lines = [l for l in result.stdout.strip().splitlines() if l.strip()]
+            lines = [ln for ln in result.stdout.strip().splitlines() if ln.strip()]
             count = len(lines)
     return socket_ok, binary_ok, count
 
@@ -139,11 +148,9 @@ def _probe_docker(fs: FakeFS, runner: FakeRunner) -> tuple:
 def _probe_coolify(fs: FakeFS, runner: FakeRunner) -> bool:
     if fs.path_exists("/data/coolify"):
         return True
-    result = runner.run(
-        ["docker", "ps", "-a", "--filter", "label=coolify", "-q"]
-    )
+    result = runner.run(["docker", "ps", "-a", "--filter", "label=coolify", "-q"])
     if result.ok():
-        lines = [l for l in result.stdout.strip().splitlines() if l.strip()]
+        lines = [ln for ln in result.stdout.strip().splitlines() if ln.strip()]
         if lines:
             return True
     return False
@@ -242,8 +249,7 @@ def _probe_selinux(runner: FakeRunner) -> tuple:
 _env_cache: Optional[Environment] = None
 
 
-def detect_environment(fs: Optional[FakeFS] = None,
-                       runner: Optional[FakeRunner] = None) -> Environment:
+def detect_environment(fs: Optional[FakeFS] = None, runner: Optional[FakeRunner] = None) -> Environment:
     """Detect the current environment and cache the result per process.
 
     Pass ``fs`` and ``runner`` for testing; they default to real

@@ -6,7 +6,7 @@ ufw, firewalld) and parses INPUT chain policy and rules into typed data.
 
 import logging
 import re
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List
 
 from common import run_cmd
 

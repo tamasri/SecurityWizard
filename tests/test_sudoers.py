@@ -2,32 +2,32 @@
 
 import os
 import sys
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 # Ensure repo root is on sys.path (conftest.py does this, but be safe)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from common import STATUS_CRITICAL, STATUS_INFO, STATUS_WARNING
 from sudoers_parse import (
     SudoRule,
-    parse_sudoers_file,
-    parse_sudoers_paths,
-    parse_all_sudoers,
-    classify_rule,
-    _parse_aliases,
-    _join_continuations,
-    _parse_rule_line,
-    _has_wildcard,
     _command_base_name,
+    _has_wildcard,
     _is_risky_command,
     _is_shell_or_interpreter,
+    _join_continuations,
+    _parse_aliases,
+    _parse_rule_line,
+    classify_rule,
+    parse_all_sudoers,
+    parse_sudoers_file,
 )
-from common import STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sudoers_content_simple():
@@ -89,6 +89,7 @@ deploy ALL=(root) NOPASSWD: /usr/local/bin/restart-app
 # Tests for _parse_aliases
 # ---------------------------------------------------------------------------
 
+
 def test_parse_aliases():
     content = """User_Alias ADMINS = alice, bob
 Cmnd_Alias RESTART = /usr/local/bin/restart-app, /usr/local/bin/stop-app
@@ -112,6 +113,7 @@ def test_parse_aliases_empty():
 # Tests for _join_continuations
 # ---------------------------------------------------------------------------
 
+
 def test_join_continuations_simple():
     lines = ["a", "b", "c"]
     result = _join_continuations(lines)
@@ -133,6 +135,7 @@ def test_join_continuations_multiple_backslashes():
 # ---------------------------------------------------------------------------
 # Tests for _parse_rule_line
 # ---------------------------------------------------------------------------
+
 
 def test_parse_rule_line_narrow():
     line = "deploy ALL=(root) NOPASSWD: /usr/local/bin/restart-app"
@@ -284,6 +287,7 @@ def test_parse_rule_line_alias_command():
 # Tests for _has_wildcard
 # ---------------------------------------------------------------------------
 
+
 def test_has_wildcard_true():
     assert _has_wildcard("/usr/bin/vim *") is True
     assert _has_wildcard("ALL") is False
@@ -293,6 +297,7 @@ def test_has_wildcard_true():
 # ---------------------------------------------------------------------------
 # Tests for _command_base_name
 # ---------------------------------------------------------------------------
+
 
 def test_command_base_name():
     assert _command_base_name("/usr/bin/vim *") == "vim"
@@ -304,6 +309,7 @@ def test_command_base_name():
 # ---------------------------------------------------------------------------
 # Tests for _is_risky_command
 # ---------------------------------------------------------------------------
+
 
 def test_is_risky_command():
     assert _is_risky_command("bash") is True
@@ -321,6 +327,7 @@ def test_is_risky_command():
 # Tests for _is_shell_or_interpreter
 # ---------------------------------------------------------------------------
 
+
 def test_is_shell_or_interpreter():
     assert _is_shell_or_interpreter("bash") is True
     assert _is_shell_or_interpreter("sh") is True
@@ -333,6 +340,7 @@ def test_is_shell_or_interpreter():
 # ---------------------------------------------------------------------------
 # Tests for parse_sudoers_file
 # ---------------------------------------------------------------------------
+
 
 def test_parse_sudoers_file_simple(tmp_path, sudoers_content_simple):
     sudoers_file = tmp_path / "sudoers"
@@ -400,6 +408,7 @@ def test_parse_sudoers_file_defaults(tmp_path, sudoers_content_defaults):
 # ---------------------------------------------------------------------------
 # Tests for classify_rule
 # ---------------------------------------------------------------------------
+
 
 def test_classify_rule_narrow():
     rule = SudoRule(
@@ -530,6 +539,7 @@ def test_classify_rule_not_allowed_by_config():
 # Tests for parse_all_sudoers (with mocked files)
 # ---------------------------------------------------------------------------
 
+
 def test_parse_all_sudoers(tmp_path, monkeypatch):
     # Create /etc/sudoers
     etc_sudoers = tmp_path / "sudoers"
@@ -543,7 +553,9 @@ def test_parse_all_sudoers(tmp_path, monkeypatch):
 
     # Mock os.path.isfile and glob.glob
     monkeypatch.setattr(os.path, "isfile", lambda p: p == "/etc/sudoers" or p == str(etc_sudoers) or p == str(extra))
-    monkeypatch.setattr("sudoers_parse.glob.glob", lambda pattern: [str(extra)] if pattern == "/etc/sudoers.d/*" else [])
+    monkeypatch.setattr(
+        "sudoers_parse.glob.glob", lambda pattern: [str(extra)] if pattern == "/etc/sudoers.d/*" else []
+    )
 
     # Mock open to read from tmp_path
     def mock_open(path, *args, **kwargs):

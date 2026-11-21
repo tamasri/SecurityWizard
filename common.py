@@ -1,11 +1,10 @@
 __version__ = "2.0.0"
 
-import subprocess
-import os
 import logging
+import os
+import subprocess
 from dataclasses import dataclass
-from datetime import datetime
-from typing import List, Optional, Union
+from typing import List, Optional
 
 logger = logging.getLogger("securitywizard")
 
@@ -99,9 +98,20 @@ def is_root() -> bool:
         return False
 
 
-def make_check(id: str, category: str, title: str, status: str, what_it_checks: str,
-               risk: str, command: str, current_value: str = "", recommended_value: str = "",
-               details=None, remediation_id: Optional[str] = None, manual_command: str = "") -> dict:
+def make_check(
+    id: str,
+    category: str,
+    title: str,
+    status: str,
+    what_it_checks: str,
+    risk: str,
+    command: str,
+    current_value: str = "",
+    recommended_value: str = "",
+    details=None,
+    remediation_id: Optional[str] = None,
+    manual_command: str = "",
+) -> dict:
     if status not in (STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED):
         logger.warning("Unknown status %r for check %s, defaulting to INFO", status, id)
         status = STATUS_INFO
@@ -117,12 +127,20 @@ def make_check(id: str, category: str, title: str, status: str, what_it_checks: 
         "recommended_value": recommended_value,
         "details": details if details is not None else [],
         "remediation_id": remediation_id,
-        "manual_command": manual_command
+        "manual_command": manual_command,
     }
 
 
-def skipped_check(id: str, category: str, title: str, what_it_checks: str, risk: str,
-                  command: str, reason: str, remediation_id: Optional[str] = None) -> dict:
+def skipped_check(
+    id: str,
+    category: str,
+    title: str,
+    what_it_checks: str,
+    risk: str,
+    command: str,
+    reason: str,
+    remediation_id: Optional[str] = None,
+) -> dict:
     return {
         "id": id,
         "category": category,
@@ -135,5 +153,5 @@ def skipped_check(id: str, category: str, title: str, what_it_checks: str, risk:
         "recommended_value": "",
         "details": [reason],
         "remediation_id": remediation_id,
-        "manual_command": ""
+        "manual_command": "",
     }

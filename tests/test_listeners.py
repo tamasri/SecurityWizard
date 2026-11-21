@@ -1,12 +1,10 @@
-import pytest
-
 from checks_network import (
-    parse_ss_line,
-    _parse_ss_output,
-    _is_exposed_to_all,
     _is_dangerous_port,
+    _is_exposed_to_all,
+    _parse_ss_output,
     check_net_001,
     check_net_002,
+    parse_ss_line,
 )
 
 
@@ -47,7 +45,7 @@ def test_parse_ss_line_tcp_ipv6_all():
 
 
 def test_parse_ss_line_tcp_ipv6_loopback_no_process():
-    line = 'tcp   LISTEN 0      128             [::1]:5432          [::]:*'
+    line = "tcp   LISTEN 0      128             [::1]:5432          [::]:*"
     result = parse_ss_line(line)
     assert result is not None
     assert result["proto"] == "tcp"
@@ -135,6 +133,7 @@ def test_check_net_001_with_mocked_ss(monkeypatch):
 tcp   LISTEN 0      511        127.0.0.1:6379       0.0.0.0:*    users:(("redis-server",pid=901,fd=6))"""
 
     from common import CmdResult
+
     monkeypatch.setattr("checks_network.run_cmd", lambda cmd, timeout=20.0: CmdResult(0, ss_output, ""))
     result = check_net_001()
     assert result["id"] == "NET-001"
@@ -148,6 +147,7 @@ def test_check_net_002_dangerous_exposed(monkeypatch):
 tcp   LISTEN 0      511        127.0.0.1:6379       0.0.0.0:*    users:(("redis-server",pid=901,fd=6))"""
 
     from common import CmdResult
+
     monkeypatch.setattr("checks_network.run_cmd", lambda cmd, timeout=20.0: CmdResult(0, ss_output, ""))
     result = check_net_002()
     assert result["id"] == "NET-002"
@@ -162,6 +162,7 @@ def test_check_net_002_no_dangerous(monkeypatch):
 tcp   LISTEN 0      511        127.0.0.1:6379       0.0.0.0:*    users:(("redis-server",pid=901,fd=6))"""
 
     from common import CmdResult
+
     monkeypatch.setattr("checks_network.run_cmd", lambda cmd, timeout=20.0: CmdResult(0, ss_output, ""))
     result = check_net_002()
     assert result["id"] == "NET-002"
@@ -172,6 +173,7 @@ tcp   LISTEN 0      511        127.0.0.1:6379       0.0.0.0:*    users:(("redis-
 
 def test_check_net_001_ss_not_found(monkeypatch):
     from common import CmdResult
+
     monkeypatch.setattr("checks_network.run_cmd", lambda cmd, timeout=20.0: CmdResult(127, "", "command not found"))
     result = check_net_001()
     assert result["id"] == "NET-001"
@@ -181,6 +183,7 @@ def test_check_net_001_ss_not_found(monkeypatch):
 
 def test_check_net_002_ss_not_found(monkeypatch):
     from common import CmdResult
+
     monkeypatch.setattr("checks_network.run_cmd", lambda cmd, timeout=20.0: CmdResult(127, "", "command not found"))
     result = check_net_002()
     assert result["id"] == "NET-002"
@@ -192,6 +195,7 @@ def test_check_net_002_ipv6_all_interfaces(monkeypatch):
     ss_output = 'tcp   LISTEN 0      4096            [::]:5432            [::]:*    users:(("postgres",pid=900,fd=3))'
 
     from common import CmdResult
+
     monkeypatch.setattr("checks_network.run_cmd", lambda cmd, timeout=20.0: CmdResult(0, ss_output, ""))
     result = check_net_002()
     assert result["id"] == "NET-002"
@@ -205,6 +209,7 @@ def test_check_net_002_ipv4_mapped_not_exposed(monkeypatch):
     ss_output = 'tcp   LISTEN 0      4096     [::ffff:10.0.0.5]:5432       *:*    users:(("postgres",pid=900,fd=3))'
 
     from common import CmdResult
+
     monkeypatch.setattr("checks_network.run_cmd", lambda cmd, timeout=20.0: CmdResult(0, ss_output, ""))
     result = check_net_002()
     assert result["id"] == "NET-002"

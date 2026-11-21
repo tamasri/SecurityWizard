@@ -1,23 +1,28 @@
-import pytest
 from unittest.mock import patch
+
+import pytest
+
 from checks_kernel import (
+    _check_aslr,
     _check_bpf_jit_harden,
-    _check_tcp_rfc1337,
-    _check_secure_redirects,
-    _check_ptrace_scope,
     _check_protected_hardlinks,
     _check_protected_symlinks,
+    _check_ptrace_scope,
+    _check_secure_redirects,
+    _check_tcp_rfc1337,
     _check_unprivileged_bpf,
-    _check_aslr,
 )
-from common import STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_SKIPPED
+from common import STATUS_CRITICAL, STATUS_PASS, STATUS_SKIPPED, STATUS_WARNING
 
 
-@pytest.mark.parametrize("value,expected_status", [
-    ("2", STATUS_PASS),
-    ("1", STATUS_WARNING),
-    ("0", STATUS_CRITICAL),
-])
+@pytest.mark.parametrize(
+    "value,expected_status",
+    [
+        ("2", STATUS_PASS),
+        ("1", STATUS_WARNING),
+        ("0", STATUS_CRITICAL),
+    ],
+)
 def test_bpf_jit_harden_pass_and_fail(value, expected_status):
     with patch("checks_kernel._read_sysctl") as mock_read:
         mock_read.return_value = (True, value)
@@ -34,10 +39,13 @@ def test_bpf_jit_harden_missing():
         assert "not found" in result["current_value"]
 
 
-@pytest.mark.parametrize("value,expected_status", [
-    ("1", STATUS_PASS),
-    ("0", STATUS_WARNING),
-])
+@pytest.mark.parametrize(
+    "value,expected_status",
+    [
+        ("1", STATUS_PASS),
+        ("0", STATUS_WARNING),
+    ],
+)
 def test_tcp_rfc1337_pass_and_fail(value, expected_status):
     with patch("checks_kernel._read_sysctl") as mock_read:
         mock_read.return_value = (True, value)
@@ -54,12 +62,15 @@ def test_tcp_rfc1337_missing():
         assert "not found" in result["current_value"]
 
 
-@pytest.mark.parametrize("all_val,def_val,expected_status", [
-    ("0", "0", STATUS_PASS),
-    ("1", "0", STATUS_WARNING),
-    ("0", "1", STATUS_WARNING),
-    ("1", "1", STATUS_WARNING),
-])
+@pytest.mark.parametrize(
+    "all_val,def_val,expected_status",
+    [
+        ("0", "0", STATUS_PASS),
+        ("1", "0", STATUS_WARNING),
+        ("0", "1", STATUS_WARNING),
+        ("1", "1", STATUS_WARNING),
+    ],
+)
 def test_secure_redirects_pass_and_fail(all_val, def_val, expected_status):
     with patch("checks_kernel._read_sysctl") as mock_read:
         mock_read.side_effect = [(True, all_val), (True, def_val)]
@@ -76,11 +87,14 @@ def test_secure_redirects_missing():
         assert "not found" in result["current_value"]
 
 
-@pytest.mark.parametrize("value,expected_status", [
-    ("1", STATUS_PASS),
-    ("2", STATUS_PASS),
-    ("0", STATUS_WARNING),
-])
+@pytest.mark.parametrize(
+    "value,expected_status",
+    [
+        ("1", STATUS_PASS),
+        ("2", STATUS_PASS),
+        ("0", STATUS_WARNING),
+    ],
+)
 def test_ptrace_scope_pass_and_fail(value, expected_status):
     with patch("checks_kernel._read_sysctl") as mock_read:
         mock_read.return_value = (True, value)
@@ -97,10 +111,13 @@ def test_ptrace_scope_missing():
         assert "not found" in result["current_value"]
 
 
-@pytest.mark.parametrize("value,expected_status", [
-    ("1", STATUS_PASS),
-    ("0", STATUS_WARNING),
-])
+@pytest.mark.parametrize(
+    "value,expected_status",
+    [
+        ("1", STATUS_PASS),
+        ("0", STATUS_WARNING),
+    ],
+)
 def test_protected_hardlinks_pass_and_fail(value, expected_status):
     with patch("checks_kernel._read_sysctl") as mock_read:
         mock_read.return_value = (True, value)
@@ -117,10 +134,13 @@ def test_protected_hardlinks_missing():
         assert "not found" in result["current_value"]
 
 
-@pytest.mark.parametrize("value,expected_status", [
-    ("1", STATUS_PASS),
-    ("0", STATUS_WARNING),
-])
+@pytest.mark.parametrize(
+    "value,expected_status",
+    [
+        ("1", STATUS_PASS),
+        ("0", STATUS_WARNING),
+    ],
+)
 def test_protected_symlinks_pass_and_fail(value, expected_status):
     with patch("checks_kernel._read_sysctl") as mock_read:
         mock_read.return_value = (True, value)
@@ -137,11 +157,14 @@ def test_protected_symlinks_missing():
         assert "not found" in result["current_value"]
 
 
-@pytest.mark.parametrize("value,expected_status", [
-    ("1", STATUS_PASS),
-    ("2", STATUS_PASS),
-    ("0", STATUS_WARNING),
-])
+@pytest.mark.parametrize(
+    "value,expected_status",
+    [
+        ("1", STATUS_PASS),
+        ("2", STATUS_PASS),
+        ("0", STATUS_WARNING),
+    ],
+)
 def test_unprivileged_bpf_pass_and_fail(value, expected_status):
     with patch("checks_kernel._read_sysctl") as mock_read:
         mock_read.return_value = (True, value)
@@ -158,11 +181,14 @@ def test_unprivileged_bpf_missing():
         assert "not found" in result["current_value"]
 
 
-@pytest.mark.parametrize("value,expected_status", [
-    ("2", STATUS_PASS),
-    ("1", STATUS_WARNING),
-    ("0", STATUS_CRITICAL),
-])
+@pytest.mark.parametrize(
+    "value,expected_status",
+    [
+        ("2", STATUS_PASS),
+        ("1", STATUS_WARNING),
+        ("0", STATUS_CRITICAL),
+    ],
+)
 def test_aslr_pass_and_fail(value, expected_status):
     with patch("checks_kernel._read_sysctl") as mock_read:
         mock_read.return_value = (True, value)

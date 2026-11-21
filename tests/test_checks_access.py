@@ -1,12 +1,14 @@
 import pytest
+
 import checks_access
-from common import STATUS_PASS, STATUS_WARNING, STATUS_INFO, STATUS_SKIPPED
+from common import STATUS_INFO, STATUS_SKIPPED, STATUS_WARNING
 
 
 def _make_rsa_key(bits=2048):
     """Create a fake RSA authorized_keys line."""
     # Simulate a base64-encoded RSA key blob
     import base64
+
     # For RSA, the blob structure is: length(e) | e | length(n) | n
     # We'll just use a fixed base64 string that decodes to something
     blob = b"\x00\x00\x00\x03\x01\x00\x01\x00\x00\x01\x00" + b"\x00" * (bits // 8)
@@ -15,12 +17,14 @@ def _make_rsa_key(bits=2048):
 
 def _make_ed25519_key():
     import base64
+
     blob = b"\x00" * 32
     return "ssh-ed25519 " + base64.b64encode(blob).decode() + " ed25519@example.com"
 
 
 def _make_dsa_key():
     import base64
+
     blob = b"\x00" * 128
     return "ssh-dss " + base64.b64encode(blob).decode() + " dsa@example.com"
 
@@ -97,13 +101,14 @@ def test_docker_group_expected_users_info():
 
 def test_permission_error_skipped():
     import builtins
+
     original_open = builtins.open
-    
+
     def mock_open(path, *args, **kwargs):
         if path == "/root/.ssh/authorized_keys":
             raise PermissionError("Permission denied")
         return original_open(path, *args, **kwargs)
-    
+
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(builtins, "open", mock_open)
     results = checks_access.run_checks(

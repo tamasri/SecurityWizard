@@ -1,10 +1,10 @@
-import json
-from unittest.mock import patch
-from checks_docker import analyze_container, _check_privileged
-from common import STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO
+from checks_docker import _check_privileged, analyze_container
+from common import STATUS_CRITICAL, STATUS_INFO, STATUS_WARNING
 
 
-def _make_inspect(name, privileged=False, net_mode="", pid_mode="", user="", security_opt=None, cap_add=None, mounts=None):
+def _make_inspect(
+    name, privileged=False, net_mode="", pid_mode="", user="", security_opt=None, cap_add=None, mounts=None
+):
     return {
         "Name": "/" + name,
         "HostConfig": {
@@ -30,7 +30,10 @@ def test_privileged_container():
 def test_privileged_container_allowlisted():
     """Test that a privileged container becomes INFO when allowlisted by config."""
     inspect_dict = _make_inspect("proxy", privileged=True)
-    findings = analyze_container(inspect_dict, allowlist_fn=lambda cid, name: {"reason": "allowed"} if cid == "DOC-002" and name == "proxy" else None)
+    findings = analyze_container(
+        inspect_dict,
+        allowlist_fn=lambda cid, name: {"reason": "allowed"} if cid == "DOC-002" and name == "proxy" else None,
+    )
     doc002 = [f for f in findings if f["id"] == "DOC-002"]
     assert doc002 and doc002[0]["status"] == STATUS_INFO and doc002[0]["allowed"] is True
 
@@ -45,7 +48,9 @@ def test_docker_sock_mount():
 def test_docker_sock_mount_allowlisted():
     mounts = [{"Type": "bind", "Source": "/var/run/docker.sock", "Destination": "/var/run/docker.sock", "RW": True}]
     inspect_dict = _make_inspect("coolify", mounts=mounts)
-    findings = analyze_container(inspect_dict, allowlist_fn=lambda cid, name: {"reason": "allowed"} if name == "coolify" else None)
+    findings = analyze_container(
+        inspect_dict, allowlist_fn=lambda cid, name: {"reason": "allowed"} if name == "coolify" else None
+    )
     doc003 = [f for f in findings if f["id"] == "DOC-003"]
     assert doc003 and doc003[0]["status"] == STATUS_INFO and doc003[0]["allowed"] is True
 
@@ -86,15 +91,15 @@ def test_check_privileged_allowlisted(monkeypatch):
     inspect_dict = _make_inspect("proxy", privileged=True)
     monkeypatch.setattr("checks_docker._get_container_ids", lambda: ["abc123"])
     monkeypatch.setattr("checks_docker._inspect_containers", lambda ids: [inspect_dict])
-    
+
     class FakeConfig:
         def allowed_docker_privileged(self, name):
             if name == "proxy":
                 return {"reason": "allowed"}
             return None
-    
+
     monkeypatch.setattr("checks_docker.get_config", lambda: FakeConfig())
-    
+
     result = _check_privileged()
     assert result["status"] == STATUS_INFO
     assert result["details"] == ["Container 'proxy' runs in privileged mode (accepted by configuration)"]

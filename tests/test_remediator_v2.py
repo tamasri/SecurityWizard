@@ -1,8 +1,5 @@
-import json
 import os
-import stat
 import sys
-import tempfile
 from unittest import mock
 
 import pytest
@@ -10,9 +7,19 @@ import pytest
 import remediator
 
 
-def _make_action(rid, title, description, file_changes=None, perm_changes=None,
-                 commands=None, validate_commands=None, inverse_commands=None,
-                 blockers=None, risky_remote=False, deadman_minutes=5):
+def _make_action(
+    rid,
+    title,
+    description,
+    file_changes=None,
+    perm_changes=None,
+    commands=None,
+    validate_commands=None,
+    inverse_commands=None,
+    blockers=None,
+    risky_remote=False,
+    deadman_minutes=5,
+):
     plan = {
         "file_changes": file_changes or [],
         "perm_changes": perm_changes or [],
@@ -71,14 +78,21 @@ def test_validator_failure_leaves_files_untouched(tmp_path):
     path = _setup_file(tmp_path, "etc/ssh/sshd_config", "Port 22\n")
     original = "Port 22\n"
     _make_action(
-        "SSH-001", "t", "d",
+        "SSH-001",
+        "t",
+        "d",
         file_changes=[{"path": path, "new_content": "Port 2222\n"}],
         validate_commands=[["sshd", "-t"]],
     )
     runner = _runner_factory(fail_cmds={"sshd"})
-    with mock.patch.dict(os.environ, {"SECURITYWIZARD_BACKUP_DIR": str(tmp_path / "backups"),
-                                       "SECURITYWIZARD_DRY_RUN_ONLY": "0",
-                                       "SECURITYWIZARD_ALLOW_NONROOT": "1"}):
+    with mock.patch.dict(
+        os.environ,
+        {
+            "SECURITYWIZARD_BACKUP_DIR": str(tmp_path / "backups"),
+            "SECURITYWIZARD_DRY_RUN_ONLY": "0",
+            "SECURITYWIZARD_ALLOW_NONROOT": "1",
+        },
+    ):
         with mock.patch.object(remediator, "_is_root", return_value=True):
             result = remediator.apply("SSH-001", confirm=True, runner=runner)
     assert result["ok"] is False
@@ -90,13 +104,20 @@ def test_validator_failure_leaves_files_untouched(tmp_path):
 def test_idempotency(tmp_path):
     path = _setup_file(tmp_path, "etc/ssh/sshd_config", "Port 2222\n")
     _make_action(
-        "SSH-001", "t", "d",
+        "SSH-001",
+        "t",
+        "d",
         file_changes=[{"path": path, "new_content": "Port 2222\n"}],
     )
     runner = _runner_factory()
-    with mock.patch.dict(os.environ, {"SECURITYWIZARD_BACKUP_DIR": str(tmp_path / "backups"),
-                                       "SECURITYWIZARD_DRY_RUN_ONLY": "0",
-                                       "SECURITYWIZARD_ALLOW_NONROOT": "1"}):
+    with mock.patch.dict(
+        os.environ,
+        {
+            "SECURITYWIZARD_BACKUP_DIR": str(tmp_path / "backups"),
+            "SECURITYWIZARD_DRY_RUN_ONLY": "0",
+            "SECURITYWIZARD_ALLOW_NONROOT": "1",
+        },
+    ):
         with mock.patch.object(remediator, "_is_root", return_value=True):
             result = remediator.apply("SSH-001", confirm=True, runner=runner)
     assert result["ok"] is True
@@ -105,12 +126,16 @@ def test_idempotency(tmp_path):
 
 def test_dry_run_only_blocks_apply(tmp_path):
     path = _setup_file(tmp_path, "etc/ssh/sshd_config", "Port 22\n")
-    _make_action("SSH-001", "t", "d",
-                 file_changes=[{"path": path, "new_content": "Port 2222\n"}])
+    _make_action("SSH-001", "t", "d", file_changes=[{"path": path, "new_content": "Port 2222\n"}])
     runner = _runner_factory()
-    with mock.patch.dict(os.environ, {"SECURITYWIZARD_BACKUP_DIR": str(tmp_path / "backups"),
-                                       "SECURITYWIZARD_DRY_RUN_ONLY": "1",
-                                       "SECURITYWIZARD_ALLOW_NONROOT": "1"}):
+    with mock.patch.dict(
+        os.environ,
+        {
+            "SECURITYWIZARD_BACKUP_DIR": str(tmp_path / "backups"),
+            "SECURITYWIZARD_DRY_RUN_ONLY": "1",
+            "SECURITYWIZARD_ALLOW_NONROOT": "1",
+        },
+    ):
         with mock.patch.object(remediator, "_is_root", return_value=True):
             result = remediator.apply("SSH-001", confirm=True, runner=runner)
     assert result["ok"] is False
@@ -123,15 +148,22 @@ def test_dry_run_only_blocks_apply(tmp_path):
 def test_risky_remote_arms_deadman(tmp_path):
     path = _setup_file(tmp_path, "etc/ssh/sshd_config", "Port 22\n")
     _make_action(
-        "SSH-001", "t", "d",
+        "SSH-001",
+        "t",
+        "d",
         file_changes=[{"path": path, "new_content": "Port 2222\n"}],
         risky_remote=True,
         deadman_minutes=5,
     )
     runner = _runner_factory()
-    with mock.patch.dict(os.environ, {"SECURITYWIZARD_BACKUP_DIR": str(tmp_path / "backups"),
-                                       "SECURITYWIZARD_DRY_RUN_ONLY": "0",
-                                       "SECURITYWIZARD_ALLOW_NONROOT": "1"}):
+    with mock.patch.dict(
+        os.environ,
+        {
+            "SECURITYWIZARD_BACKUP_DIR": str(tmp_path / "backups"),
+            "SECURITYWIZARD_DRY_RUN_ONLY": "0",
+            "SECURITYWIZARD_ALLOW_NONROOT": "1",
+        },
+    ):
         with mock.patch.object(remediator, "_is_root", return_value=True):
             result = remediator.apply("SSH-001", confirm=True, runner=runner)
     assert result["ok"] is True
@@ -142,16 +174,22 @@ def test_risky_remote_arms_deadman(tmp_path):
 
 def test_precondition_refuses(tmp_path):
     path = _setup_file(tmp_path, "etc/ssh/sshd_config", "Port 22\n")
-    _make_action("SSH-001", "t", "d",
-                 file_changes=[{"path": path, "new_content": "Port 2222\n"}])
+    _make_action("SSH-001", "t", "d", file_changes=[{"path": path, "new_content": "Port 2222\n"}])
     runner = _runner_factory()
-    precondition = lambda plan: "would cut current connection"
-    with mock.patch.dict(os.environ, {"SECURITYWIZARD_BACKUP_DIR": str(tmp_path / "backups"),
-                                       "SECURITYWIZARD_DRY_RUN_ONLY": "0",
-                                       "SECURITYWIZARD_ALLOW_NONROOT": "1"}):
+
+    def precondition(plan):
+        return "would cut current connection"
+
+    with mock.patch.dict(
+        os.environ,
+        {
+            "SECURITYWIZARD_BACKUP_DIR": str(tmp_path / "backups"),
+            "SECURITYWIZARD_DRY_RUN_ONLY": "0",
+            "SECURITYWIZARD_ALLOW_NONROOT": "1",
+        },
+    ):
         with mock.patch.object(remediator, "_is_root", return_value=True):
-            result = remediator.apply("SSH-001", confirm=True, runner=runner,
-                                      precondition=precondition)
+            result = remediator.apply("SSH-001", confirm=True, runner=runner, precondition=precondition)
     assert result["ok"] is False
     assert "precondition" in result["message"]
     with open(path) as f:

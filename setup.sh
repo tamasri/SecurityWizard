@@ -17,6 +17,20 @@ if [[ ${EUID} -ne 0 ]]; then
   usage
 fi
 
+DATA_DIR="${SECURITYWIZARD_DATA_DIR:-${SECURITYWIZARD_BACKUP_DIR:-/var/backups/securitywizard}/data}"
+
+credentials_note() {
+  cat <<EOF
+
+The dashboard is protected by default. On the first start it generates a simple random username and
+password and shows them ONCE:
+  - in the console output of './setup.sh run'
+  - for the service:  journalctl -u securitywizard -n 50 --no-pager | grep -i -A3 initial
+  - in the private file ${DATA_DIR}/initial-credentials.txt
+Log in with them, then change them from the Account menu (a banner reminds you, it is not forced).
+EOF
+}
+
 cmd="${1:-install}"
 case "$cmd" in
   install)
@@ -57,8 +71,10 @@ case "$cmd" in
     echo "Start the dashboard with: ./venv/bin/python main.py"
     echo "Reach it from your laptop with: ssh -L 8443:127.0.0.1:8443 user@server"
     echo "Then open http://127.0.0.1:8443 in your browser."
+    credentials_note
     ;;
   run)
+    credentials_note
     exec ./venv/bin/python main.py
     ;;
   service)
@@ -74,6 +90,9 @@ case "$cmd" in
       echo "Error: main module import failed. Run './setup.sh install' first." >&2
       exit 1
     }
+    # ProtectSystem=strict makes systemd refuse to start the unit when a ReadWritePaths directory is missing.
+    mkdir -p /var/backups/securitywizard "${DATA_DIR}"
+    chmod 700 /var/backups/securitywizard
     cat > /etc/systemd/system/securitywizard.service <<EOF
 [Unit]
 Description=SecurityWizard Security Dashboard
@@ -103,6 +122,15 @@ EOF
     systemctl enable securitywizard.service
     systemctl start securitywizard.service
     echo "Service installed and started on 127.0.0.1:8443"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      [[ -f "${DATA_DIR}/initial-credentials.txt" ]] && break
+      sleep 1
+    done
+    if [[ -f "${DATA_DIR}/initial-credentials.txt" ]]; then
+      echo
+      cat "${DATA_DIR}/initial-credentials.txt"
+    fi
+    credentials_note
     ;;
   *)
     usage

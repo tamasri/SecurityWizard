@@ -9,13 +9,13 @@ is one of STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO,
 STATUS_SKIPPED.
 """
 
+import builtins
 import glob
 import logging
 import os
 import re
-import builtins
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple, Dict, Set
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 builtins_open = builtins.open
 
@@ -30,139 +30,574 @@ STATUS_SKIPPED = "SKIPPED"
 
 # GTFOBins-style commands that can spawn a shell or escalate privileges
 _RISKY_COMMANDS = {
-    "sh", "bash", "dash", "zsh", "ksh", "csh", "tcsh",
-    "python", "python2", "python3", "python3.0", "python3.1", "python3.2",
-    "python3.3", "python3.4", "python3.5", "python3.6", "python3.7",
-    "python3.8", "python3.9", "python3.10", "python3.11", "python3.12",
-    "perl", "ruby",
-    "vim", "vi", "nano", "emacs", "less", "more",
-    "find", "awk", "gawk", "mawk",
-    "env", "tar", "rsync", "cp", "mv",
-    "docker", "systemctl", "journalctl",
-    "php", "node", "nodejs", "lua", "tclsh", "wish",
-    "nmap", "ssh", "scp", "sftp",
-    "ldd", "strace", "ltrace", "gdb", "valgrind",
-    "xargs", "tee", "dd", "ddrescue",
-    "chroot", "nsenter", "unshare", "mount", "umount",
-    "ip", "iptables", "nft", "ufw",
-    "crontab", "at", "batch",
-    "rsync", "rsh", "telnet",
-    "make", "cmake", "gcc", "g++", "cc", "c++",
-    "ld", "as", "ar", "ranlib",
-    "strip", "nm", "objdump", "readelf",
-    "file", "strings", "hexdump", "od",
-    "stat", "cat", "head", "tail", "wc", "sort", "uniq",
-    "grep", "egrep", "fgrep", "sed", "tr", "cut", "paste",
-    "join", "comm", "diff", "cmp",
-    "basename", "dirname", "realpath",
-    "test", "[", "true", "false",
-    "date", "cal", "bc", "dc",
-    "expr", "seq", "yes", "shuf",
-    "sleep", "timeout", "watch",
-    "kill", "pkill", "killall",
-    "ps", "top", "htop", "vmstat", "iostat", "mpstat",
-    "free", "df", "du", "fdisk", "parted",
-    "blkid", "lsblk", "lscpu", "lsmem",
-    "uname", "uptime", "who", "w", "users", "id",
-    "groups", "newgrp", "sg", "su",
-    "chown", "chgrp", "chmod", "chattr",
-    "ln", "mkdir", "rmdir", "touch", "unlink",
-    "rm", "cp", "mv", "install",
-    "tar", "gzip", "gunzip", "bzip2", "bunzip2",
-    "xz", "unxz", "lz4", "unlz4",
-    "zip", "unzip", "rar", "unrar", "7z",
-    "patch", "diff", "diff3",
-    "awk", "gawk", "mawk", "sed", "egrep", "fgrep",
-    "find", "locate", "updatedb",
-    "xargs", "time", "nice", "ionice",
-    "nohup", "setsid", "screen", "tmux",
-    "ssh", "scp", "sftp", "rsync", "rsh", "telnet",
-    "ftp", "curl", "wget", "nc", "ncat", "netcat",
-    "ping", "ping6", "traceroute", "tracepath",
-    "dig", "host", "nslookup",
-    "ip", "ifconfig", "route", "arp",
-    "iptables", "ip6tables", "nft", "ufw", "firewall-cmd",
-    "systemctl", "service", "init",
-    "journalctl", "dmesg", "syslog",
-    "crontab", "at", "batch", "anacron",
-    "docker", "podman", "containerd", "ctr",
-    "kubectl", "helm",
-    "git", "svn", "hg", "bzr",
-    "make", "cmake", "ninja",
-    "gcc", "g++", "cc", "c++", "clang", "clang++",
-    "ld", "as", "ar", "ranlib", "nm", "objdump", "readelf",
-    "strip", "file", "strings", "hexdump", "od",
-    "strace", "ltrace", "gdb", "valgrind",
-    "perf", "ftrace", "kprobe",
-    "bash", "sh", "dash", "zsh", "ksh", "csh", "tcsh",
-    "python", "python2", "python3", "perl", "ruby", "php",
-    "node", "nodejs", "lua", "tclsh", "wish",
-    "vim", "vi", "nano", "emacs", "less", "more",
-    "env", "export", "set", "unset",
-    "tar", "rsync", "cp", "mv", "dd",
-    "find", "awk", "sed", "grep", "egrep", "fgrep",
-    "env", "tar", "rsync", "docker", "systemctl",
+    "sh",
+    "bash",
+    "dash",
+    "zsh",
+    "ksh",
+    "csh",
+    "tcsh",
+    "python",
+    "python2",
+    "python3",
+    "python3.0",
+    "python3.1",
+    "python3.2",
+    "python3.3",
+    "python3.4",
+    "python3.5",
+    "python3.6",
+    "python3.7",
+    "python3.8",
+    "python3.9",
+    "python3.10",
+    "python3.11",
+    "python3.12",
+    "perl",
+    "ruby",
+    "vim",
+    "vi",
+    "nano",
+    "emacs",
+    "less",
+    "more",
+    "find",
+    "awk",
+    "gawk",
+    "mawk",
+    "env",
+    "tar",
+    "rsync",
+    "cp",
+    "mv",
+    "docker",
+    "systemctl",
+    "journalctl",
+    "php",
+    "node",
+    "nodejs",
+    "lua",
+    "tclsh",
+    "wish",
+    "nmap",
+    "ssh",
+    "scp",
+    "sftp",
+    "ldd",
+    "strace",
+    "ltrace",
+    "gdb",
+    "valgrind",
+    "xargs",
+    "tee",
+    "dd",
+    "ddrescue",
+    "chroot",
+    "nsenter",
+    "unshare",
+    "mount",
+    "umount",
+    "ip",
+    "iptables",
+    "nft",
+    "ufw",
+    "crontab",
+    "at",
+    "batch",
+    "rsync",
+    "rsh",
+    "telnet",
+    "make",
+    "cmake",
+    "gcc",
+    "g++",
+    "cc",
+    "c++",
+    "ld",
+    "as",
+    "ar",
+    "ranlib",
+    "strip",
+    "nm",
+    "objdump",
+    "readelf",
+    "file",
+    "strings",
+    "hexdump",
+    "od",
+    "stat",
+    "cat",
+    "head",
+    "tail",
+    "wc",
+    "sort",
+    "uniq",
+    "grep",
+    "egrep",
+    "fgrep",
+    "sed",
+    "tr",
+    "cut",
+    "paste",
+    "join",
+    "comm",
+    "diff",
+    "cmp",
+    "basename",
+    "dirname",
+    "realpath",
+    "test",
+    "[",
+    "true",
+    "false",
+    "date",
+    "cal",
+    "bc",
+    "dc",
+    "expr",
+    "seq",
+    "yes",
+    "shuf",
+    "sleep",
+    "timeout",
+    "watch",
+    "kill",
+    "pkill",
+    "killall",
+    "ps",
+    "top",
+    "htop",
+    "vmstat",
+    "iostat",
+    "mpstat",
+    "free",
+    "df",
+    "du",
+    "fdisk",
+    "parted",
+    "blkid",
+    "lsblk",
+    "lscpu",
+    "lsmem",
+    "uname",
+    "uptime",
+    "who",
+    "w",
+    "users",
+    "id",
+    "groups",
+    "newgrp",
+    "sg",
+    "su",
+    "chown",
+    "chgrp",
+    "chmod",
+    "chattr",
+    "ln",
+    "mkdir",
+    "rmdir",
+    "touch",
+    "unlink",
+    "rm",
+    "cp",
+    "mv",
+    "install",
+    "tar",
+    "gzip",
+    "gunzip",
+    "bzip2",
+    "bunzip2",
+    "xz",
+    "unxz",
+    "lz4",
+    "unlz4",
+    "zip",
+    "unzip",
+    "rar",
+    "unrar",
+    "7z",
+    "patch",
+    "diff",
+    "diff3",
+    "awk",
+    "gawk",
+    "mawk",
+    "sed",
+    "egrep",
+    "fgrep",
+    "find",
+    "locate",
+    "updatedb",
+    "xargs",
+    "time",
+    "nice",
+    "ionice",
+    "nohup",
+    "setsid",
+    "screen",
+    "tmux",
+    "ssh",
+    "scp",
+    "sftp",
+    "rsync",
+    "rsh",
+    "telnet",
+    "ftp",
+    "curl",
+    "wget",
+    "nc",
+    "ncat",
+    "netcat",
+    "ping",
+    "ping6",
+    "traceroute",
+    "tracepath",
+    "dig",
+    "host",
+    "nslookup",
+    "ip",
+    "ifconfig",
+    "route",
+    "arp",
+    "iptables",
+    "ip6tables",
+    "nft",
+    "ufw",
+    "firewall-cmd",
+    "systemctl",
+    "service",
+    "init",
+    "journalctl",
+    "dmesg",
+    "syslog",
+    "crontab",
+    "at",
+    "batch",
+    "anacron",
+    "docker",
+    "podman",
+    "containerd",
+    "ctr",
+    "kubectl",
+    "helm",
+    "git",
+    "svn",
+    "hg",
+    "bzr",
+    "make",
+    "cmake",
+    "ninja",
+    "gcc",
+    "g++",
+    "cc",
+    "c++",
+    "clang",
+    "clang++",
+    "ld",
+    "as",
+    "ar",
+    "ranlib",
+    "nm",
+    "objdump",
+    "readelf",
+    "strip",
+    "file",
+    "strings",
+    "hexdump",
+    "od",
+    "strace",
+    "ltrace",
+    "gdb",
+    "valgrind",
+    "perf",
+    "ftrace",
+    "kprobe",
+    "bash",
+    "sh",
+    "dash",
+    "zsh",
+    "ksh",
+    "csh",
+    "tcsh",
+    "python",
+    "python2",
+    "python3",
+    "perl",
+    "ruby",
+    "php",
+    "node",
+    "nodejs",
+    "lua",
+    "tclsh",
+    "wish",
+    "vim",
+    "vi",
+    "nano",
+    "emacs",
+    "less",
+    "more",
+    "env",
+    "export",
+    "set",
+    "unset",
+    "tar",
+    "rsync",
+    "cp",
+    "mv",
+    "dd",
+    "find",
+    "awk",
+    "sed",
+    "grep",
+    "egrep",
+    "fgrep",
+    "env",
+    "tar",
+    "rsync",
+    "docker",
+    "systemctl",
 }
 
 # Commands that are safe when given a single exact path (no wildcard)
 _SAFE_EXACT_COMMANDS = {
-    "ls", "cat", "head", "tail", "wc", "sort", "uniq",
-    "grep", "egrep", "fgrep", "sed", "tr", "cut", "paste",
-    "join", "comm", "diff", "cmp",
-    "basename", "dirname", "realpath",
-    "test", "[", "true", "false",
-    "date", "cal", "bc", "dc",
-    "expr", "seq", "yes", "shuf",
-    "sleep", "timeout", "watch",
-    "kill", "pkill", "killall",
-    "ps", "top", "htop", "vmstat", "iostat", "mpstat",
-    "free", "df", "du", "fdisk", "parted",
-    "blkid", "lsblk", "lscpu", "lsmem",
-    "uname", "uptime", "who", "w", "users", "id",
-    "groups", "newgrp", "sg", "su",
-    "chown", "chgrp", "chmod", "chattr",
-    "ln", "mkdir", "rmdir", "touch", "unlink",
-    "rm", "cp", "mv", "install",
-    "tar", "gzip", "gunzip", "bzip2", "bunzip2",
-    "xz", "unxz", "lz4", "unlz4",
-    "zip", "unzip", "rar", "unrar", "7z",
-    "patch", "diff", "diff3",
-    "awk", "gawk", "mawk", "sed", "egrep", "fgrep",
-    "find", "locate", "updatedb",
-    "xargs", "time", "nice", "ionice",
-    "nohup", "setsid", "screen", "tmux",
-    "ssh", "scp", "sftp", "rsync", "rsh", "telnet",
-    "ftp", "curl", "wget", "nc", "ncat", "netcat",
-    "ping", "ping6", "traceroute", "tracepath",
-    "dig", "host", "nslookup",
-    "ip", "ifconfig", "route", "arp",
-    "iptables", "ip6tables", "nft", "ufw", "firewall-cmd",
-    "systemctl", "service", "init",
-    "journalctl", "dmesg", "syslog",
-    "crontab", "at", "batch", "anacron",
-    "docker", "podman", "containerd", "ctr",
-    "kubectl", "helm",
-    "git", "svn", "hg", "bzr",
-    "make", "cmake", "ninja",
-    "gcc", "g++", "cc", "c++", "clang", "clang++",
-    "ld", "as", "ar", "ranlib", "nm", "objdump", "readelf",
-    "strip", "file", "strings", "hexdump", "od",
-    "strace", "ltrace", "gdb", "valgrind",
-    "perf", "ftrace", "kprobe",
-    "bash", "sh", "dash", "zsh", "ksh", "csh", "tcsh",
-    "python", "python2", "python3", "perl", "ruby", "php",
-    "node", "nodejs", "lua", "tclsh", "wish",
-    "vim", "vi", "nano", "emacs", "less", "more",
-    "env", "export", "set", "unset",
-    "tar", "rsync", "cp", "mv", "dd",
-    "find", "awk", "sed", "grep", "egrep", "fgrep",
-    "env", "tar", "rsync", "docker", "systemctl",
+    "ls",
+    "cat",
+    "head",
+    "tail",
+    "wc",
+    "sort",
+    "uniq",
+    "grep",
+    "egrep",
+    "fgrep",
+    "sed",
+    "tr",
+    "cut",
+    "paste",
+    "join",
+    "comm",
+    "diff",
+    "cmp",
+    "basename",
+    "dirname",
+    "realpath",
+    "test",
+    "[",
+    "true",
+    "false",
+    "date",
+    "cal",
+    "bc",
+    "dc",
+    "expr",
+    "seq",
+    "yes",
+    "shuf",
+    "sleep",
+    "timeout",
+    "watch",
+    "kill",
+    "pkill",
+    "killall",
+    "ps",
+    "top",
+    "htop",
+    "vmstat",
+    "iostat",
+    "mpstat",
+    "free",
+    "df",
+    "du",
+    "fdisk",
+    "parted",
+    "blkid",
+    "lsblk",
+    "lscpu",
+    "lsmem",
+    "uname",
+    "uptime",
+    "who",
+    "w",
+    "users",
+    "id",
+    "groups",
+    "newgrp",
+    "sg",
+    "su",
+    "chown",
+    "chgrp",
+    "chmod",
+    "chattr",
+    "ln",
+    "mkdir",
+    "rmdir",
+    "touch",
+    "unlink",
+    "rm",
+    "cp",
+    "mv",
+    "install",
+    "tar",
+    "gzip",
+    "gunzip",
+    "bzip2",
+    "bunzip2",
+    "xz",
+    "unxz",
+    "lz4",
+    "unlz4",
+    "zip",
+    "unzip",
+    "rar",
+    "unrar",
+    "7z",
+    "patch",
+    "diff",
+    "diff3",
+    "awk",
+    "gawk",
+    "mawk",
+    "sed",
+    "egrep",
+    "fgrep",
+    "find",
+    "locate",
+    "updatedb",
+    "xargs",
+    "time",
+    "nice",
+    "ionice",
+    "nohup",
+    "setsid",
+    "screen",
+    "tmux",
+    "ssh",
+    "scp",
+    "sftp",
+    "rsync",
+    "rsh",
+    "telnet",
+    "ftp",
+    "curl",
+    "wget",
+    "nc",
+    "ncat",
+    "netcat",
+    "ping",
+    "ping6",
+    "traceroute",
+    "tracepath",
+    "dig",
+    "host",
+    "nslookup",
+    "ip",
+    "ifconfig",
+    "route",
+    "arp",
+    "iptables",
+    "ip6tables",
+    "nft",
+    "ufw",
+    "firewall-cmd",
+    "systemctl",
+    "service",
+    "init",
+    "journalctl",
+    "dmesg",
+    "syslog",
+    "crontab",
+    "at",
+    "batch",
+    "anacron",
+    "docker",
+    "podman",
+    "containerd",
+    "ctr",
+    "kubectl",
+    "helm",
+    "git",
+    "svn",
+    "hg",
+    "bzr",
+    "make",
+    "cmake",
+    "ninja",
+    "gcc",
+    "g++",
+    "cc",
+    "c++",
+    "clang",
+    "clang++",
+    "ld",
+    "as",
+    "ar",
+    "ranlib",
+    "nm",
+    "objdump",
+    "readelf",
+    "strip",
+    "file",
+    "strings",
+    "hexdump",
+    "od",
+    "strace",
+    "ltrace",
+    "gdb",
+    "valgrind",
+    "perf",
+    "ftrace",
+    "kprobe",
+    "bash",
+    "sh",
+    "dash",
+    "zsh",
+    "ksh",
+    "csh",
+    "tcsh",
+    "python",
+    "python2",
+    "python3",
+    "perl",
+    "ruby",
+    "php",
+    "node",
+    "nodejs",
+    "lua",
+    "tclsh",
+    "wish",
+    "vim",
+    "vi",
+    "nano",
+    "emacs",
+    "less",
+    "more",
+    "env",
+    "export",
+    "set",
+    "unset",
+    "tar",
+    "rsync",
+    "cp",
+    "mv",
+    "dd",
+    "find",
+    "awk",
+    "sed",
+    "grep",
+    "egrep",
+    "fgrep",
+    "env",
+    "tar",
+    "rsync",
+    "docker",
+    "systemctl",
 }
 
 
 @dataclass
 class SudoRule:
     """A parsed sudoers rule."""
+
     user: str
     hosts: List[str]
     runas: List[str]
@@ -178,6 +613,7 @@ class SudoRule:
 # Alias resolution
 # ---------------------------------------------------------------------------
 
+
 def _parse_aliases(content: str) -> Dict[str, List[str]]:
     """Parse User_Alias, Cmnd_Alias, Runas_Alias, Host_Alias definitions."""
     aliases: Dict[str, List[str]] = {}
@@ -185,8 +621,12 @@ def _parse_aliases(content: str) -> Dict[str, List[str]]:
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
-        if stripped.startswith("User_Alias") or stripped.startswith("Cmnd_Alias") \
-                or stripped.startswith("Runas_Alias") or stripped.startswith("Host_Alias"):
+        if (
+            stripped.startswith("User_Alias")
+            or stripped.startswith("Cmnd_Alias")
+            or stripped.startswith("Runas_Alias")
+            or stripped.startswith("Host_Alias")
+        ):
             parts = stripped.split("=", 1)
             if len(parts) == 2:
                 alias_name = parts[0].strip().split()[1]
@@ -205,6 +645,7 @@ def _resolve_aliases(value: str, aliases: Dict[str, List[str]]) -> List[str]:
 # ---------------------------------------------------------------------------
 # Line continuation handling
 # ---------------------------------------------------------------------------
+
 
 def _join_continuations(lines: List[str]) -> List[Tuple[str, int]]:
     """Join lines ending with backslash into logical lines.
@@ -228,8 +669,8 @@ def _join_continuations(lines: List[str]) -> List[Tuple[str, int]]:
 # Parsing a single sudoers rule line
 # ---------------------------------------------------------------------------
 
-def _parse_rule_line(line: str, source_file: str, line_num: int,
-                     aliases: Dict[str, List[str]]) -> Optional[SudoRule]:
+
+def _parse_rule_line(line: str, source_file: str, line_num: int, aliases: Dict[str, List[str]]) -> Optional[SudoRule]:
     """Parse a single sudoers rule line.
 
     Returns a SudoRule or None if the line is not a rule (Defaults, alias,
@@ -244,8 +685,12 @@ def _parse_rule_line(line: str, source_file: str, line_num: int,
         return None
 
     # Skip alias definitions
-    if (stripped.startswith("User_Alias") or stripped.startswith("Cmnd_Alias")
-            or stripped.startswith("Runas_Alias") or stripped.startswith("Host_Alias")):
+    if (
+        stripped.startswith("User_Alias")
+        or stripped.startswith("Cmnd_Alias")
+        or stripped.startswith("Runas_Alias")
+        or stripped.startswith("Host_Alias")
+    ):
         return None
 
     # Skip #include and #includedir
@@ -268,7 +713,7 @@ def _parse_rule_line(line: str, source_file: str, line_num: int,
     if eq_idx != -1 and (paren_idx == -1 or eq_idx < paren_idx):
         # Format: user host=(runas) ... or user host=cmd ...
         left = stripped[:eq_idx].strip()
-        right = stripped[eq_idx + 1:].strip()
+        right = stripped[eq_idx + 1 :].strip()
     else:
         # Format: user host=(runas) ...
         # The '=' is inside the parentheses
@@ -286,8 +731,8 @@ def _parse_rule_line(line: str, source_file: str, line_num: int,
                     break
         if end_paren == -1:
             return None
-        runas_part = stripped[paren_idx + 1:end_paren].strip()
-        right = stripped[end_paren + 1:].strip()
+        stripped[paren_idx + 1 : end_paren].strip()
+        right = stripped[end_paren + 1 :].strip()
         # left is "user host"
         # right is "[TAGS:] cmd, cmd, ..."
         # runas_part is the runas list
@@ -334,7 +779,7 @@ def _parse_rule_line(line: str, source_file: str, line_num: int,
             if end_paren == -1:
                 return None
             runas_raw = right[1:end_paren].strip()
-            rest = right[end_paren + 1:].strip()
+            rest = right[end_paren + 1 :].strip()
         else:
             runas_raw = "root"
             rest = right
@@ -359,11 +804,11 @@ def _parse_rule_line(line: str, source_file: str, line_num: int,
         # Check for tags before the first command
         # Tags are like "NOPASSWD:", "PASSWD:", "SETENV:", "NOEXEC:"
         # They appear before the first command
-        tag_pattern = re.compile(r'^(NOPASSWD|PASSWD|SETENV|NOEXEC)\s*:')
+        tag_pattern = re.compile(r"^(NOPASSWD|PASSWD|SETENV|NOEXEC)\s*:")
         while tag_pattern.match(rest):
             m = tag_pattern.match(rest)
             tags.append(m.group(1))
-            rest = rest[m.end():].strip()
+            rest = rest[m.end() :].strip()
         command_part = rest
 
         # Parse commands (comma-separated)
@@ -401,6 +846,7 @@ def _parse_rule_line(line: str, source_file: str, line_num: int,
 # Parse a sudoers file
 # ---------------------------------------------------------------------------
 
+
 def parse_sudoers_file(path: str) -> List[SudoRule]:
     """Parse a sudoers file and return a list of SudoRule objects."""
     try:
@@ -434,6 +880,7 @@ def parse_sudoers_paths(paths: List[str]) -> List[SudoRule]:
 # ---------------------------------------------------------------------------
 # Classify a rule
 # ---------------------------------------------------------------------------
+
 
 def _has_wildcard(command: str) -> bool:
     """Check if a command string contains a wildcard (*)."""
@@ -472,9 +919,26 @@ def _is_narrow_command(command: str) -> bool:
 def _is_shell_or_interpreter(command: str) -> bool:
     """Check if a command is a shell or interpreter."""
     base = _command_base_name(command)
-    shells = {"sh", "bash", "dash", "zsh", "ksh", "csh", "tcsh",
-              "python", "python2", "python3", "perl", "ruby",
-              "php", "node", "nodejs", "lua", "tclsh", "wish"}
+    shells = {
+        "sh",
+        "bash",
+        "dash",
+        "zsh",
+        "ksh",
+        "csh",
+        "tcsh",
+        "python",
+        "python2",
+        "python3",
+        "perl",
+        "ruby",
+        "php",
+        "node",
+        "nodejs",
+        "lua",
+        "tclsh",
+        "wish",
+    }
     if base in shells:
         return True
     for s in shells:
@@ -483,8 +947,7 @@ def _is_shell_or_interpreter(command: str) -> bool:
     return False
 
 
-def classify_rule(rule: SudoRule,
-                  config=None) -> Tuple[str, str]:
+def classify_rule(rule: SudoRule, config=None) -> Tuple[str, str]:
     """Classify a sudoers rule and return (severity, reason).
 
     severity is one of STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL,
@@ -495,73 +958,74 @@ def classify_rule(rule: SudoRule,
     if config is not None:
         for cmd in rule.commands:
             if config.allowed_sudo_rule(rule.user, cmd) is not None:
-                return (STATUS_INFO,
-                        "Allowed by config: %s can run %s" % (rule.user, cmd))
+                return (STATUS_INFO, "Allowed by config: %s can run %s" % (rule.user, cmd))
 
     # Negated rules are less concerning
     if rule.negated:
-        return (STATUS_INFO,
-                "Negated rule: !%s" % rule.user)
+        return (STATUS_INFO, "Negated rule: !%s" % rule.user)
 
     # Check for NOPASSWD: ALL
     has_nopasswd = "NOPASSWD" in rule.tags
     has_all_command = "ALL" in rule.commands
 
     if has_nopasswd and has_all_command:
-        return (STATUS_CRITICAL,
-                "NOPASSWD: ALL - %s can run any command as %s without a password"
-                % (rule.user, ",".join(rule.runas)))
+        return (
+            STATUS_CRITICAL,
+            "NOPASSWD: ALL - %s can run any command as %s without a password" % (rule.user, ",".join(rule.runas)),
+        )
 
     # Check for wildcard arguments on shell/interpreter/editor commands
     for cmd in rule.commands:
         if _has_wildcard(cmd):
             base = _command_base_name(cmd)
-            if _is_shell_or_interpreter(cmd) or base in {"vim", "vi", "nano",
-                                                         "less", "more", "find",
-                                                         "awk", "env", "tar",
-                                                         "rsync", "docker",
-                                                         "systemctl"}:
-                return (STATUS_CRITICAL,
-                        "Wildcard argument on %s: %s can run %s with wildcard"
-                        % (base, rule.user, cmd))
+            if _is_shell_or_interpreter(cmd) or base in {
+                "vim",
+                "vi",
+                "nano",
+                "less",
+                "more",
+                "find",
+                "awk",
+                "env",
+                "tar",
+                "rsync",
+                "docker",
+                "systemctl",
+            }:
+                return (
+                    STATUS_CRITICAL,
+                    "Wildcard argument on %s: %s can run %s with wildcard" % (base, rule.user, cmd),
+                )
 
     # Check for risky commands (GTFOBins-style)
     for cmd in rule.commands:
         if _is_risky_command(cmd):
             base = _command_base_name(cmd)
             if has_nopasswd:
-                return (STATUS_CRITICAL,
-                        "NOPASSWD with risky command %s: %s can run %s without a password"
-                        % (base, rule.user, cmd))
-            return (STATUS_WARNING,
-                    "Risky command %s: %s can run %s"
-                    % (base, rule.user, cmd))
+                return (
+                    STATUS_CRITICAL,
+                    "NOPASSWD with risky command %s: %s can run %s without a password" % (base, rule.user, cmd),
+                )
+            return (STATUS_WARNING, "Risky command %s: %s can run %s" % (base, rule.user, cmd))
 
     # Narrow rule: single exact command
     if len(rule.commands) == 1 and not _has_wildcard(rule.commands[0]):
         cmd = rule.commands[0]
         base = _command_base_name(cmd)
         if has_nopasswd:
-            return (STATUS_INFO,
-                    "NOPASSWD with narrow command: %s can run %s without a password"
-                    % (rule.user, cmd))
-        return (STATUS_INFO,
-                "Narrow rule: %s can run %s"
-                % (rule.user, cmd))
+            return (STATUS_INFO, "NOPASSWD with narrow command: %s can run %s without a password" % (rule.user, cmd))
+        return (STATUS_INFO, "Narrow rule: %s can run %s" % (rule.user, cmd))
 
     # Multiple commands, no wildcards, no risky commands
     if has_nopasswd:
-        return (STATUS_INFO,
-                "NOPASSWD with %d commands: %s"
-                % (len(rule.commands), ",".join(rule.commands)))
-    return (STATUS_INFO,
-            "%d commands: %s"
-            % (len(rule.commands), ",".join(rule.commands)))
+        return (STATUS_INFO, "NOPASSWD with %d commands: %s" % (len(rule.commands), ",".join(rule.commands)))
+    return (STATUS_INFO, "%d commands: %s" % (len(rule.commands), ",".join(rule.commands)))
 
 
 # ---------------------------------------------------------------------------
 # Parse all sudoers files
 # ---------------------------------------------------------------------------
+
 
 def parse_all_sudoers() -> List[SudoRule]:
     """Parse /etc/sudoers and /etc/sudoers.d/* and return all rules."""

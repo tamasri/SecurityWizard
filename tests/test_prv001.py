@@ -2,25 +2,23 @@
 
 import os
 import sys
-from unittest.mock import patch
 
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from checks_privilege import build_find_cmd, _check_suid_sgid
+from checks_privilege import _check_suid_sgid, build_find_cmd
 from common import (
-    STATUS_PASS,
-    STATUS_WARNING,
     STATUS_CRITICAL,
-    STATUS_INFO,
+    STATUS_PASS,
     STATUS_SKIPPED,
+    STATUS_WARNING,
 )
-
 
 # ---------------------------------------------------------------------------
 # build_find_cmd tests
 # ---------------------------------------------------------------------------
+
 
 def test_build_find_cmd_paths_first():
     """Paths must appear before -xdev and before any expression."""
@@ -39,9 +37,13 @@ def test_build_find_cmd_prune_exclusions():
     """All required prune exclusions must be present."""
     cmd = build_find_cmd(["/usr/bin"])
     expected_exclusions = [
-        "/proc", "/sys",
-        "/var/lib/docker", "/var/lib/containerd",
-        "/snap", "/var/snap", "/var/lib/snapd",
+        "/proc",
+        "/sys",
+        "/var/lib/docker",
+        "/var/lib/containerd",
+        "/snap",
+        "/var/snap",
+        "/var/lib/snapd",
     ]
     for ex in expected_exclusions:
         # Each exclusion appears as -path <ex> -prune -o
@@ -69,6 +71,7 @@ def test_build_find_cmd_ends_with_perm_type():
 # _check_suid_sgid classification tests
 # ---------------------------------------------------------------------------
 
+
 def _make_config(allowed=None):
     """Return a mock config whose allowed_suid() uses the given set."""
     allowed = allowed or set()
@@ -88,7 +91,10 @@ def test_prv001_all_safe_dpkg(monkeypatch, tmp_path):
 
     monkeypatch.setattr("checks_privilege.os.path.isdir", lambda p: p in ("/usr/bin", "/bin"))
     monkeypatch.setattr("checks_privilege.run_cmd", lambda args, timeout=120: (0, fake_find_out, ""))
-    monkeypatch.setattr("checks_privilege.glob.glob", lambda pattern: [str(fake_dpkg_list)] if pattern == "/var/lib/dpkg/info/*.list" else [])
+    monkeypatch.setattr(
+        "checks_privilege.glob.glob",
+        lambda pattern: [str(fake_dpkg_list)] if pattern == "/var/lib/dpkg/info/*.list" else [],
+    )
     monkeypatch.setattr("checks_privilege.get_config", lambda: _make_config())
 
     result = _check_suid_sgid()
@@ -104,7 +110,10 @@ def test_prv001_risky_gtfo(monkeypatch, tmp_path):
 
     monkeypatch.setattr("checks_privilege.os.path.isdir", lambda p: p in ("/usr/bin", "/bin"))
     monkeypatch.setattr("checks_privilege.run_cmd", lambda args, timeout=120: (0, fake_find_out, ""))
-    monkeypatch.setattr("checks_privilege.glob.glob", lambda pattern: [str(fake_dpkg_list)] if pattern == "/var/lib/dpkg/info/*.list" else [])
+    monkeypatch.setattr(
+        "checks_privilege.glob.glob",
+        lambda pattern: [str(fake_dpkg_list)] if pattern == "/var/lib/dpkg/info/*.list" else [],
+    )
     monkeypatch.setattr("checks_privilege.get_config", lambda: _make_config())
 
     result = _check_suid_sgid()
@@ -120,7 +129,10 @@ def test_prv001_unknown_not_dpkg(monkeypatch, tmp_path):
 
     monkeypatch.setattr("checks_privilege.os.path.isdir", lambda p: p in ("/usr/bin", "/bin", "/opt"))
     monkeypatch.setattr("checks_privilege.run_cmd", lambda args, timeout=120: (0, fake_find_out, ""))
-    monkeypatch.setattr("checks_privilege.glob.glob", lambda pattern: [str(fake_dpkg_list)] if pattern == "/var/lib/dpkg/info/*.list" else [])
+    monkeypatch.setattr(
+        "checks_privilege.glob.glob",
+        lambda pattern: [str(fake_dpkg_list)] if pattern == "/var/lib/dpkg/info/*.list" else [],
+    )
     monkeypatch.setattr("checks_privilege.get_config", lambda: _make_config())
 
     result = _check_suid_sgid()
@@ -136,7 +148,10 @@ def test_prv001_allowed_suid_skips(monkeypatch, tmp_path):
 
     monkeypatch.setattr("checks_privilege.os.path.isdir", lambda p: p in ("/usr/bin", "/bin", "/opt"))
     monkeypatch.setattr("checks_privilege.run_cmd", lambda args, timeout=120: (0, fake_find_out, ""))
-    monkeypatch.setattr("checks_privilege.glob.glob", lambda pattern: [str(fake_dpkg_list)] if pattern == "/var/lib/dpkg/info/*.list" else [])
+    monkeypatch.setattr(
+        "checks_privilege.glob.glob",
+        lambda pattern: [str(fake_dpkg_list)] if pattern == "/var/lib/dpkg/info/*.list" else [],
+    )
     monkeypatch.setattr("checks_privilege.get_config", lambda: _make_config(allowed={"/opt/mytool"}))
 
     result = _check_suid_sgid()

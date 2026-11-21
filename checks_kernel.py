@@ -1,16 +1,13 @@
 """checks_kernel.py - Kernel & Network Stack Hardening (sysctl) checks."""
 
 import os
-import re
 
 from common import (
+    STATUS_CRITICAL,
     STATUS_PASS,
     STATUS_WARNING,
-    STATUS_CRITICAL,
-    STATUS_INFO,
-    STATUS_SKIPPED,
-    run_cmd,
     make_check,
+    run_cmd,
     skipped_check,
 )
 
@@ -48,7 +45,7 @@ def _is_container_or_multihomed() -> bool:
     # 4. Multi-homed / Multiple default routes
     rc, out, _ = run_cmd(["ip", "route", "show", "default"])
     if rc == 0:
-        lines = [l for l in out.strip().splitlines() if l.strip()]
+        lines = [ln for ln in out.strip().splitlines() if ln.strip()]
         if len(lines) > 1:
             return True
 
@@ -101,7 +98,8 @@ def _check_rpf() -> dict:
 
         if not found_all or not found_def:
             return skipped_check(
-                "KRN-001", "kernel",
+                "KRN-001",
+                "kernel",
                 "rp_filter = 1 for all and default (anti IP spoofing)",
                 "Checks that the kernel enforces strict reverse path filtering on all interfaces and the default interface.",
                 "An attacker can spoof source IPs to bypass firewall rules or poison ARP tables.",
@@ -127,17 +125,23 @@ def _check_rpf() -> dict:
                 status = STATUS_PASS
                 rec = "1 (strict) or 2 (loose)"
                 manual = "sysctl -w net.ipv4.conf.all.rp_filter=2 net.ipv4.conf.default.rp_filter=2"
-                details.append("Strict mode (1) is acceptable, but loose (2) is recommended for containerized environments.")
+                details.append(
+                    "Strict mode (1) is acceptable, but loose (2) is recommended for containerized environments."
+                )
             elif val_all == "0" or val_def == "0":
                 status = STATUS_WARNING
                 rec = "2 (loose)"
                 manual = "sysctl -w net.ipv4.conf.all.rp_filter=2 net.ipv4.conf.default.rp_filter=2"
-                details.append("rp_filter is disabled (0); loose mode (2) is recommended to avoid breaking container networking.")
+                details.append(
+                    "rp_filter is disabled (0); loose mode (2) is recommended to avoid breaking container networking."
+                )
             else:
                 status = STATUS_WARNING
                 rec = "2 (loose)"
                 manual = "sysctl -w net.ipv4.conf.all.rp_filter=2 net.ipv4.conf.default.rp_filter=2"
-                details.append("Mixed rp_filter values; loose mode (2) is recommended for consistency on containerized hosts.")
+                details.append(
+                    "Mixed rp_filter values; loose mode (2) is recommended for consistency on containerized hosts."
+                )
         else:
             if val_all == "1" and val_def == "1":
                 status = STATUS_PASS
@@ -157,7 +161,8 @@ def _check_rpf() -> dict:
                 manual = "sysctl -w net.ipv4.conf.all.rp_filter=1 net.ipv4.conf.default.rp_filter=1"
 
         return make_check(
-            "KRN-001", "kernel",
+            "KRN-001",
+            "kernel",
             "rp_filter = 1 for all and default (anti IP spoofing)",
             status,
             "Reverse path filtering verifies that the source IP of an incoming packet can be routed back via the same interface it arrived on. "
@@ -175,7 +180,8 @@ def _check_rpf() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-001", "kernel",
+            "KRN-001",
+            "kernel",
             "rp_filter = 1 for all and default (anti IP spoofing)",
             "Checks that the kernel enforces strict reverse path filtering on all interfaces and the default interface.",
             "An attacker can spoof source IPs to bypass firewall rules or poison ARP tables.",
@@ -192,7 +198,8 @@ def _check_accept_redirects() -> dict:
 
         if not found_v4:
             return skipped_check(
-                "KRN-002", "kernel",
+                "KRN-002",
+                "kernel",
                 "accept_redirects = 0 for IPv4 and IPv6 (anti ICMP MITM)",
                 "Checks that the kernel ignores ICMP redirect messages on all interfaces for both IPv4 and IPv6.",
                 "An attacker can send forged ICMP redirects to reroute traffic through a rogue gateway.",
@@ -228,7 +235,8 @@ def _check_accept_redirects() -> dict:
             manual = "sysctl -w net.ipv4.conf.all.accept_redirects=0 net.ipv6.conf.all.accept_redirects=0"
 
         return make_check(
-            "KRN-002", "kernel",
+            "KRN-002",
+            "kernel",
             "accept_redirects = 0 for IPv4 and IPv6 (anti ICMP MITM)",
             status,
             "ICMP redirect messages tell the host to send future packets via a different gateway. "
@@ -244,7 +252,8 @@ def _check_accept_redirects() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-002", "kernel",
+            "KRN-002",
+            "kernel",
             "accept_redirects = 0 for IPv4 and IPv6 (anti ICMP MITM)",
             "Checks that the kernel ignores ICMP redirect messages on all interfaces for both IPv4 and IPv6.",
             "An attacker can send forged ICMP redirects to reroute traffic through a rogue gateway.",
@@ -259,7 +268,8 @@ def _check_send_redirects() -> dict:
         found, val = _read_sysctl("net.ipv4.conf.all.send_redirects")
         if not found:
             return skipped_check(
-                "KRN-003", "kernel",
+                "KRN-003",
+                "kernel",
                 "net.ipv4.conf.all.send_redirects = 0",
                 "Checks that the kernel does not send ICMP redirect messages to other hosts.",
                 "As a router or host that forwards packets, sending redirects can leak topology and enable MITM.",
@@ -281,7 +291,8 @@ def _check_send_redirects() -> dict:
             manual = "sysctl -w net.ipv4.conf.all.send_redirects=0"
 
         return make_check(
-            "KRN-003", "kernel",
+            "KRN-003",
+            "kernel",
             "net.ipv4.conf.all.send_redirects = 0",
             status,
             "When a host acts as a router or forwards packets, it may send ICMP redirects telling other hosts to use a better path. "
@@ -297,7 +308,8 @@ def _check_send_redirects() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-003", "kernel",
+            "KRN-003",
+            "kernel",
             "net.ipv4.conf.all.send_redirects = 0",
             "Checks that the kernel does not send ICMP redirect messages to other hosts.",
             "As a router or host that forwards packets, sending redirects can leak topology and enable MITM.",
@@ -312,7 +324,8 @@ def _check_syncookies() -> dict:
         found, val = _read_sysctl("net.ipv4.tcp_syncookies")
         if not found:
             return skipped_check(
-                "KRN-004", "kernel",
+                "KRN-004",
+                "kernel",
                 "net.ipv4.tcp_syncookies = 1 (SYN flood protection)",
                 "Checks that TCP SYN cookies are enabled to defend against SYN flood denial-of-service attacks.",
                 "Without SYN cookies, an attacker can exhaust the connection backlog and make the host unresponsive.",
@@ -334,7 +347,8 @@ def _check_syncookies() -> dict:
             manual = "sysctl -w net.ipv4.tcp_syncookies=1"
 
         return make_check(
-            "KRN-004", "kernel",
+            "KRN-004",
+            "kernel",
             "net.ipv4.tcp_syncookies = 1 (SYN flood protection)",
             status,
             "SYN cookies allow the kernel to accept new TCP connections even when the SYN backlog is full, by encoding connection state "
@@ -350,7 +364,8 @@ def _check_syncookies() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-004", "kernel",
+            "KRN-004",
+            "kernel",
             "net.ipv4.tcp_syncookies = 1 (SYN flood protection)",
             "Checks that TCP SYN cookies are enabled to defend against SYN flood denial-of-service attacks.",
             "Without SYN cookies, an attacker can exhaust the connection backlog and make the host unresponsive.",
@@ -365,7 +380,8 @@ def _check_source_route() -> dict:
         found, val = _read_sysctl("net.ipv4.conf.all.accept_source_route")
         if not found:
             return skipped_check(
-                "KRN-005", "kernel",
+                "KRN-005",
+                "kernel",
                 "net.ipv4.conf.all.accept_source_route = 0",
                 "Checks that the kernel does not accept source routing (record route) options in IP packets.",
                 "An attacker can use source routing to force traffic through a compromised intermediate host.",
@@ -387,7 +403,8 @@ def _check_source_route() -> dict:
             manual = "sysctl -w net.ipv4.conf.all.accept_source_route=0"
 
         return make_check(
-            "KRN-005", "kernel",
+            "KRN-005",
+            "kernel",
             "net.ipv4.conf.all.accept_source_route = 0",
             status,
             "IP source routing allows the sender to specify the path packets must take. Disabling accept_source_route prevents remote hosts "
@@ -403,7 +420,8 @@ def _check_source_route() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-005", "kernel",
+            "KRN-005",
+            "kernel",
             "net.ipv4.conf.all.accept_source_route = 0",
             "Checks that the kernel does not accept source routing (record route) options in IP packets.",
             "An attacker can use source routing to force traffic through a compromised intermediate host.",
@@ -418,7 +436,8 @@ def _check_dmesg_restrict() -> dict:
         found, val = _read_sysctl("kernel.dmesg_restrict")
         if not found:
             return skipped_check(
-                "KRN-006", "kernel",
+                "KRN-006",
+                "kernel",
                 "kernel.dmesg_restrict = 1",
                 "Checks that only privileged users can read kernel ring buffer messages via dmesg.",
                 "Kernel messages often contain sensitive data such as memory addresses, MAC addresses, and hardware details.",
@@ -440,7 +459,8 @@ def _check_dmesg_restrict() -> dict:
             manual = "sysctl -w kernel.dmesg_restrict=1"
 
         return make_check(
-            "KRN-006", "kernel",
+            "KRN-006",
+            "kernel",
             "kernel.dmesg_restrict = 1",
             status,
             "The kernel ring buffer (readable via dmesg or /dev/kmsg) contains boot messages, hardware info, and runtime events. "
@@ -456,7 +476,8 @@ def _check_dmesg_restrict() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-006", "kernel",
+            "KRN-006",
+            "kernel",
             "kernel.dmesg_restrict = 1",
             "Checks that only privileged users can read kernel ring buffer messages via dmesg.",
             "Kernel messages often contain sensitive data such as memory addresses, MAC addresses, and hardware details.",
@@ -471,7 +492,8 @@ def _check_kptr_restrict() -> dict:
         found, val = _read_sysctl("kernel.kptr_restrict")
         if not found:
             return skipped_check(
-                "KRN-007", "kernel",
+                "KRN-007",
+                "kernel",
                 "kernel.kptr_restrict >= 1 (kernel pointer protection)",
                 "Checks that kernel pointer addresses are hidden from unprivileged users.",
                 "Exposing kernel pointer addresses helps attackers defeat KASLR and craft reliable kernel exploits.",
@@ -502,7 +524,8 @@ def _check_kptr_restrict() -> dict:
             manual = "sysctl -w kernel.kptr_restrict=2"
 
         return make_check(
-            "KRN-007", "kernel",
+            "KRN-007",
+            "kernel",
             "kernel.kptr_restrict >= 1 (kernel pointer protection)",
             status,
             "Kernel pointer addresses are exposed in /proc/kallsyms and other interfaces. Setting kptr_restrict to 2 hides these addresses "
@@ -518,7 +541,8 @@ def _check_kptr_restrict() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-007", "kernel",
+            "KRN-007",
+            "kernel",
             "kernel.kptr_restrict >= 1 (kernel pointer protection)",
             "Checks that kernel pointer addresses are hidden from unprivileged users.",
             "Exposing kernel pointer addresses helps attackers defeat KASLR and craft reliable kernel exploits.",
@@ -533,7 +557,8 @@ def _check_bpf_jit_harden() -> dict:
         found, val = _read_sysctl("net.core.bpf_jit_harden")
         if not found:
             return skipped_check(
-                "KRN-008", "kernel",
+                "KRN-008",
+                "kernel",
                 "net.core.bpf_jit_harden = 2 (BPF JIT hardening)",
                 "Checks that BPF JIT hardening is set to the strictest mode.",
                 "Without JIT hardening, BPF programs may execute with less strict register checking, potentially allowing memory corruption.",
@@ -564,7 +589,8 @@ def _check_bpf_jit_harden() -> dict:
             manual = "sysctl -w net.core.bpf_jit_harden=2"
 
         return make_check(
-            "KRN-008", "kernel",
+            "KRN-008",
+            "kernel",
             "net.core.bpf_jit_harden = 2 (BPF JIT hardening)",
             status,
             "BPF JIT hardening controls the strictness of the BPF Just-In-Time compiler's register checking. "
@@ -580,7 +606,8 @@ def _check_bpf_jit_harden() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-008", "kernel",
+            "KRN-008",
+            "kernel",
             "net.core.bpf_jit_harden = 2 (BPF JIT hardening)",
             "Checks that BPF JIT hardening is set to the strictest mode.",
             "Without JIT hardening, BPF programs may execute with less strict register checking, potentially allowing memory corruption.",
@@ -595,7 +622,8 @@ def _check_tcp_rfc1337() -> dict:
         found, val = _read_sysctl("net.ipv4.tcp_rfc1337")
         if not found:
             return skipped_check(
-                "KRN-009", "kernel",
+                "KRN-009",
+                "kernel",
                 "net.ipv4.tcp_rfc1337 = 1 (TCP TIME_WAIT assassination protection)",
                 "Checks that TCP TIME_WAIT assassination protection is enabled.",
                 "Without RFC 1337 protection, an attacker can send a FIN packet to close a connection in TIME_WAIT state, disrupting legitimate connections.",
@@ -617,7 +645,8 @@ def _check_tcp_rfc1337() -> dict:
             manual = "sysctl -w net.ipv4.tcp_rfc1337=1"
 
         return make_check(
-            "KRN-009", "kernel",
+            "KRN-009",
+            "kernel",
             "net.ipv4.tcp_rfc1337 = 1 (TCP TIME_WAIT assassination protection)",
             status,
             "TCP RFC 1337 protection prevents an attacker from sending a FIN packet to a connection in TIME_WAIT state, "
@@ -633,7 +662,8 @@ def _check_tcp_rfc1337() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-009", "kernel",
+            "KRN-009",
+            "kernel",
             "net.ipv4.tcp_rfc1337 = 1 (TCP TIME_WAIT assassination protection)",
             "Checks that TCP TIME_WAIT assassination protection is enabled.",
             "Without RFC 1337 protection, an attacker can send a FIN packet to close a connection in TIME_WAIT state, disrupting legitimate connections.",
@@ -650,7 +680,8 @@ def _check_secure_redirects() -> dict:
 
         if not found_all or not found_def:
             return skipped_check(
-                "KRN-010", "kernel",
+                "KRN-010",
+                "kernel",
                 "net.ipv4.conf.all.secure_redirects = 0 and default = 0 (secure ICMP redirects)",
                 "Checks that the kernel only accepts ICMP redirects from default gateways.",
                 "An attacker can send forged ICMP redirects from non-gateway hosts to reroute traffic.",
@@ -675,7 +706,8 @@ def _check_secure_redirects() -> dict:
             manual = "sysctl -w net.ipv4.conf.all.secure_redirects=0 net.ipv4.conf.default.secure_redirects=0"
 
         return make_check(
-            "KRN-010", "kernel",
+            "KRN-010",
+            "kernel",
             "net.ipv4.conf.all.secure_redirects = 0 and default = 0 (secure ICMP redirects)",
             status,
             "Secure ICMP redirects restrict the acceptance of ICMP redirect messages to only those coming from default gateways. "
@@ -691,7 +723,8 @@ def _check_secure_redirects() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-010", "kernel",
+            "KRN-010",
+            "kernel",
             "net.ipv4.conf.all.secure_redirects = 0 and default = 0 (secure ICMP redirects)",
             "Checks that the kernel only accepts ICMP redirects from default gateways.",
             "An attacker can send forged ICMP redirects from non-gateway hosts to reroute traffic.",
@@ -706,7 +739,8 @@ def _check_ptrace_scope() -> dict:
         found, val = _read_sysctl("kernel.yama.ptrace_scope")
         if not found:
             return skipped_check(
-                "KRN-011", "kernel",
+                "KRN-011",
+                "kernel",
                 "kernel.yama.ptrace_scope >= 1 (Yama PTrace protection)",
                 "Checks that Yama PTrace protection is enabled.",
                 "Without PTrace protection, any process can attach to and inspect any other process, enabling privilege escalation.",
@@ -733,7 +767,8 @@ def _check_ptrace_scope() -> dict:
             manual = "sysctl -w kernel.yama.ptrace_scope=1"
 
         return make_check(
-            "KRN-011", "kernel",
+            "KRN-011",
+            "kernel",
             "kernel.yama.ptrace_scope >= 1 (Yama PTrace protection)",
             status,
             "Yama PTrace protection restricts which processes can attach to which other processes using ptrace. "
@@ -749,7 +784,8 @@ def _check_ptrace_scope() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-011", "kernel",
+            "KRN-011",
+            "kernel",
             "kernel.yama.ptrace_scope >= 1 (Yama PTrace protection)",
             "Checks that Yama PTrace protection is enabled.",
             "Without PTrace protection, any process can attach to and inspect any other process, enabling privilege escalation.",
@@ -764,7 +800,8 @@ def _check_protected_hardlinks() -> dict:
         found, val = _read_sysctl("fs.protected_hardlinks")
         if not found:
             return skipped_check(
-                "KRN-012", "kernel",
+                "KRN-012",
+                "kernel",
                 "fs.protected_hardlinks = 1 (protected hard links)",
                 "Checks that hard links can only be created by the file owner or root.",
                 "Without protection, any user can create hard links to files owned by others, potentially reading or modifying them.",
@@ -786,7 +823,8 @@ def _check_protected_hardlinks() -> dict:
             manual = "sysctl -w fs.protected_hardlinks=1"
 
         return make_check(
-            "KRN-012", "kernel",
+            "KRN-012",
+            "kernel",
             "fs.protected_hardlinks = 1 (protected hard links)",
             status,
             "Protected hard links restrict the creation of hard links to files to only the file owner or root. "
@@ -802,7 +840,8 @@ def _check_protected_hardlinks() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-012", "kernel",
+            "KRN-012",
+            "kernel",
             "fs.protected_hardlinks = 1 (protected hard links)",
             "Checks that hard links can only be created by the file owner or root.",
             "Without protection, any user can create hard links to files owned by others, potentially reading or modifying them.",
@@ -817,7 +856,8 @@ def _check_protected_symlinks() -> dict:
         found, val = _read_sysctl("fs.protected_symlinks")
         if not found:
             return skipped_check(
-                "KRN-013", "kernel",
+                "KRN-013",
+                "kernel",
                 "fs.protected_symlinks = 1 (protected symbolic links)",
                 "Checks that symbolic links in sticky directories can only be followed by the directory owner or file owner.",
                 "Without protection, any user can follow symbolic links in sticky directories to access files they don't own.",
@@ -839,7 +879,8 @@ def _check_protected_symlinks() -> dict:
             manual = "sysctl -w fs.protected_symlinks=1"
 
         return make_check(
-            "KRN-013", "kernel",
+            "KRN-013",
+            "kernel",
             "fs.protected_symlinks = 1 (protected symbolic links)",
             status,
             "Protected symbolic links restrict the following of symbolic links in sticky directories (like /tmp) to only the directory owner or file owner. "
@@ -855,7 +896,8 @@ def _check_protected_symlinks() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-013", "kernel",
+            "KRN-013",
+            "kernel",
             "fs.protected_symlinks = 1 (protected symbolic links)",
             "Checks that symbolic links in sticky directories can only be followed by the directory owner or file owner.",
             "Without protection, any user can follow symbolic links in sticky directories to access files they don't own.",
@@ -870,7 +912,8 @@ def _check_unprivileged_bpf() -> dict:
         found, val = _read_sysctl("kernel.unprivileged_bpf_disabled")
         if not found:
             return skipped_check(
-                "KRN-014", "kernel",
+                "KRN-014",
+                "kernel",
                 "kernel.unprivileged_bpf_disabled >= 1 (unprivileged BPF disabled)",
                 "Checks that unprivileged BPF is disabled.",
                 "Without disabling unprivileged BPF, any user can create and execute BPF programs, potentially leading to privilege escalation.",
@@ -897,7 +940,8 @@ def _check_unprivileged_bpf() -> dict:
             manual = "sysctl -w kernel.unprivileged_bpf_disabled=1"
 
         return make_check(
-            "KRN-014", "kernel",
+            "KRN-014",
+            "kernel",
             "kernel.unprivileged_bpf_disabled >= 1 (unprivileged BPF disabled)",
             status,
             "Disabling unprivileged BPF prevents non-root users from creating and executing BPF programs. "
@@ -913,7 +957,8 @@ def _check_unprivileged_bpf() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-014", "kernel",
+            "KRN-014",
+            "kernel",
             "kernel.unprivileged_bpf_disabled >= 1 (unprivileged BPF disabled)",
             "Checks that unprivileged BPF is disabled.",
             "Without disabling unprivileged BPF, any user can create and execute BPF programs, potentially leading to privilege escalation.",
@@ -928,7 +973,8 @@ def _check_aslr() -> dict:
         found, val = _read_sysctl("kernel.randomize_va_space")
         if not found:
             return skipped_check(
-                "KRN-015", "kernel",
+                "KRN-015",
+                "kernel",
                 "kernel.randomize_va_space = 2 (ASLR enabled)",
                 "Checks that Address Space Layout Randomization (ASLR) is enabled.",
                 "Without ASLR, memory addresses are predictable, making it easier for attackers to craft reliable exploits.",
@@ -954,7 +1000,8 @@ def _check_aslr() -> dict:
             manual = "sysctl -w kernel.randomize_va_space=2"
 
         return make_check(
-            "KRN-015", "kernel",
+            "KRN-015",
+            "kernel",
             "kernel.randomize_va_space = 2 (ASLR enabled)",
             status,
             "Address Space Layout Randomization (ASLR) randomizes the memory locations of key data areas such as the heap, stack, and libraries. "
@@ -970,7 +1017,8 @@ def _check_aslr() -> dict:
         )
     except Exception as exc:
         return skipped_check(
-            "KRN-015", "kernel",
+            "KRN-015",
+            "kernel",
             "kernel.randomize_va_space = 2 (ASLR enabled)",
             "Checks that Address Space Layout Randomization (ASLR) is enabled.",
             "Without ASLR, memory addresses are predictable, making it easier for attackers to craft reliable exploits.",

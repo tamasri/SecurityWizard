@@ -1,7 +1,7 @@
-import pytest
-from unittest.mock import patch, MagicMock
-import actions_ssh
+from unittest.mock import patch
+
 import actions_network
+import actions_ssh
 
 
 class TestSSHPreconditions:
@@ -21,13 +21,17 @@ class TestSSHPreconditions:
     def test_root_login_refused_without_keys(self):
         """Restricting root login when no authorized_keys exist should be blocked."""
         with patch.object(actions_ssh, "_find_authorized_keys", return_value=False):
-            plan = actions_ssh._build_ssh_plan("PermitRootLogin", "prohibit-password", lockout_check=True, lockout_value="prohibit-password")
+            plan = actions_ssh._build_ssh_plan(
+                "PermitRootLogin", "prohibit-password", lockout_check=True, lockout_value="prohibit-password"
+            )
             assert len(plan["blockers"]) == 1
 
     def test_root_login_allowed_with_keys(self):
         """Restricting root login when authorized_keys exist should be allowed."""
         with patch.object(actions_ssh, "_find_authorized_keys", return_value=True):
-            plan = actions_ssh._build_ssh_plan("PermitRootLogin", "prohibit-password", lockout_check=True, lockout_value="prohibit-password")
+            plan = actions_ssh._build_ssh_plan(
+                "PermitRootLogin", "prohibit-password", lockout_check=True, lockout_value="prohibit-password"
+            )
             assert len(plan["blockers"]) == 0
 
     def test_non_lockout_action_no_blockers(self):
@@ -56,31 +60,41 @@ class TestSSHValidators:
 class TestNetworkPreconditions:
     def test_ufw_baseline_refused_without_ssh_ports(self):
         """UFW baseline should be refused if SSH ports cannot be determined."""
-        with patch.object(actions_network, "_ufw_installed", return_value=True),              patch.object(actions_network, "_detect_ssh_ports", return_value=[]):
+        with (
+            patch.object(actions_network, "_ufw_installed", return_value=True),
+            patch.object(actions_network, "_detect_ssh_ports", return_value=[]),
+        ):
             plan = actions_network._build_ufw_baseline()
             assert len(plan["blockers"]) == 1
             assert "Could not determine the SSH port" in plan["blockers"][0]
 
     def test_ufw_baseline_allowed_with_ssh_ports(self):
         """UFW baseline should be allowed if SSH ports are found."""
-        with patch.object(actions_network, "_ufw_installed", return_value=True),              patch.object(actions_network, "_detect_ssh_ports", return_value=[22]):
+        with (
+            patch.object(actions_network, "_ufw_installed", return_value=True),
+            patch.object(actions_network, "_detect_ssh_ports", return_value=[22]),
+        ):
             plan = actions_network._build_ufw_baseline()
             assert len(plan["blockers"]) == 0
 
     def test_docker_user_refused_without_ssh_ports(self):
         """Docker-User isolation should be refused if SSH ports cannot be determined."""
-        with patch.object(actions_network, "_docker_installed", return_value=True), \
-             patch.object(actions_network, "_ufw_installed", return_value=True), \
-             patch.object(actions_network, "_detect_ssh_ports", return_value=[]):
+        with (
+            patch.object(actions_network, "_docker_installed", return_value=True),
+            patch.object(actions_network, "_ufw_installed", return_value=True),
+            patch.object(actions_network, "_detect_ssh_ports", return_value=[]),
+        ):
             plan = actions_network._build_docker_user_isolation()
             assert len(plan["blockers"]) == 1
             assert "Could not determine SSH ports" in plan["blockers"][0]
 
     def test_docker_user_allowed_with_ssh_ports(self):
         """Docker-User isolation should be allowed if SSH ports are found."""
-        with patch.object(actions_network, "_docker_installed", return_value=True), \
-             patch.object(actions_network, "_ufw_installed", return_value=True), \
-             patch.object(actions_network, "_detect_ssh_ports", return_value=[22]):
+        with (
+            patch.object(actions_network, "_docker_installed", return_value=True),
+            patch.object(actions_network, "_ufw_installed", return_value=True),
+            patch.object(actions_network, "_detect_ssh_ports", return_value=[22]),
+        ):
             plan = actions_network._build_docker_user_isolation()
             assert len(plan["blockers"]) == 0
 
@@ -88,8 +102,10 @@ class TestNetworkPreconditions:
 class TestNetworkValidators:
     def test_ufw_validate_commands_attached(self):
         """UFW actions should have ufw status validator."""
-        with patch.object(actions_network, "_ufw_installed", return_value=True), \
-             patch.object(actions_network, "_detect_ssh_ports", return_value=[22]):
+        with (
+            patch.object(actions_network, "_ufw_installed", return_value=True),
+            patch.object(actions_network, "_detect_ssh_ports", return_value=[22]),
+        ):
             plan = actions_network._build_ufw_baseline()
             assert plan["validate_commands"] == [["ufw", "status"]]
 
@@ -105,9 +121,11 @@ class TestNetworkValidators:
 
     def test_docker_user_validate_commands_attached(self):
         """Docker-User actions should have ufw status validator."""
-        with patch.object(actions_network, "_docker_installed", return_value=True), \
-             patch.object(actions_network, "_ufw_installed", return_value=True), \
-             patch.object(actions_network, "_detect_ssh_ports", return_value=[22]):
+        with (
+            patch.object(actions_network, "_docker_installed", return_value=True),
+            patch.object(actions_network, "_ufw_installed", return_value=True),
+            patch.object(actions_network, "_detect_ssh_ports", return_value=[22]),
+        ):
             plan = actions_network._build_docker_user_isolation()
             assert plan["validate_commands"] == [["ufw", "status"]]
 

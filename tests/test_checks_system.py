@@ -1,21 +1,25 @@
 """Tests for checks_system.py."""
-import pytest
+
 from unittest.mock import MagicMock, patch
-from common import (
-    STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED,
-    make_check, skipped_check, run_cmd, read_text,
-)
-from envdetect import Environment
+
 from checks_system import (
-    _check_auditd,
-    _check_unattended_upgrades,
-    _check_reboot_required,
-    _check_noexec_tmp,
-    _check_core_dumps,
-    _check_time_sync,
     _check_apparmor_selinux,
+    _check_auditd,
+    _check_core_dumps,
+    _check_noexec_tmp,
+    _check_reboot_required,
+    _check_time_sync,
+    _check_unattended_upgrades,
     run_checks,
 )
+from common import (
+    STATUS_INFO,
+    STATUS_PASS,
+    STATUS_SKIPPED,
+    STATUS_WARNING,
+)
+from envdetect import Environment
+
 
 def _make_env(is_docker=False):
     """Create an Environment object with the specified docker flag."""
@@ -26,6 +30,7 @@ def _make_env(is_docker=False):
 
 def _make_cmd_result(returncode=0, stdout="", stderr="", timed_out=False, not_found=False):
     from common import CmdResult
+
     return CmdResult(
         returncode=returncode,
         stdout=stdout,
@@ -67,7 +72,9 @@ class TestCheckAuditd:
         runner = MagicMock()
         runner.side_effect = [
             _make_cmd_result(returncode=0, stdout="enabled 1\n"),
-            _make_cmd_result(returncode=0, stdout="-w /etc/passwd -p wa -k identity\n-w /etc/shadow -p wa -k identity\n"),
+            _make_cmd_result(
+                returncode=0, stdout="-w /etc/passwd -p wa -k identity\n-w /etc/shadow -p wa -k identity\n"
+            ),
         ]
         result = _check_auditd(runner=runner)
         assert result["id"] == "SYS-001"
@@ -87,7 +94,10 @@ class TestCheckUnattendedUpgrades:
     def test_installed_but_timer_not_enabled(self):
         runner = MagicMock()
         runner.side_effect = [
-            _make_cmd_result(returncode=0, stdout="ii  unattended-upgrades 1.2.3  amd64  automatic installation of security upgrades\n"),
+            _make_cmd_result(
+                returncode=0,
+                stdout="ii  unattended-upgrades 1.2.3  amd64  automatic installation of security upgrades\n",
+            ),
             _make_cmd_result(returncode=1, stderr="disabled"),
         ]
         result = _check_unattended_upgrades(runner=runner)
@@ -98,7 +108,10 @@ class TestCheckUnattendedUpgrades:
     def test_installed_and_enabled(self):
         runner = MagicMock()
         runner.side_effect = [
-            _make_cmd_result(returncode=0, stdout="ii  unattended-upgrades 1.2.3  amd64  automatic installation of security upgrades\n"),
+            _make_cmd_result(
+                returncode=0,
+                stdout="ii  unattended-upgrades 1.2.3  amd64  automatic installation of security upgrades\n",
+            ),
             _make_cmd_result(returncode=0, stdout="enabled\n"),
         ]
         result = _check_unattended_upgrades(runner=runner)
@@ -111,17 +124,17 @@ class TestCheckRebootRequired:
     def test_reboot_required(self, tmp_path):
         reboot_file = tmp_path / "reboot-required"
         reboot_file.write_text("Reboot required\n")
-        
+
         runner = MagicMock()
         runner.side_effect = [
             _make_cmd_result(returncode=0, stdout="6.8.0-40-generic\n"),
             _make_cmd_result(returncode=0, stdout="ii  linux-image-6.8.0-40-generic  6.8.0-40.40  amd64\n"),
         ]
-        
+
         with patch("checks_system.open", create=True) as mock_open:
             mock_open.return_value.__enter__.return_value.read.return_value = "Reboot required\n"
             result = _check_reboot_required(runner=runner)
-        
+
         assert result["id"] == "SYS-003"
         assert result["status"] == STATUS_WARNING
         assert "Reboot required" in result["title"]
@@ -132,11 +145,11 @@ class TestCheckRebootRequired:
             _make_cmd_result(returncode=0, stdout="6.8.0-40-generic\n"),
             _make_cmd_result(returncode=0, stdout="ii  linux-image-6.8.0-40-generic  6.8.0-40.40  amd64\n"),
         ]
-        
+
         with patch("checks_system.open", create=True) as mock_open:
             mock_open.side_effect = FileNotFoundError()
             result = _check_reboot_required(runner=runner)
-        
+
         assert result["id"] == "SYS-003"
         assert result["status"] == STATUS_PASS
         assert "No reboot required" in result["title"]
@@ -147,11 +160,11 @@ class TestCheckRebootRequired:
             _make_cmd_result(returncode=0, stdout="6.8.0-39-generic\n"),
             _make_cmd_result(returncode=0, stdout="ii  linux-image-6.8.0-40-generic  6.8.0-40.40  amd64\n"),
         ]
-        
+
         with patch("checks_system.open", create=True) as mock_open:
             mock_open.side_effect = FileNotFoundError()
             result = _check_reboot_required(runner=runner)
-        
+
         assert result["id"] == "SYS-003"
         assert result["status"] == STATUS_WARNING
         assert "not in installed list" in result["title"]
@@ -162,7 +175,7 @@ class TestCheckNoexecTmp:
         runner = MagicMock()
         runner.return_value = _make_cmd_result(
             returncode=0,
-            stdout="/dev/sda1 on / type ext4 (rw,noatime)\ntmpfs on /tmp type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\ntmpfs on /var/tmp type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\ntmpfs on /dev/shm type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\n"
+            stdout="/dev/sda1 on / type ext4 (rw,noatime)\ntmpfs on /tmp type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\ntmpfs on /var/tmp type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\ntmpfs on /dev/shm type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\n",
         )
         env = _make_env(is_docker=False)
         result = _check_noexec_tmp(runner=runner, env=env)
@@ -174,7 +187,7 @@ class TestCheckNoexecTmp:
         runner = MagicMock()
         runner.return_value = _make_cmd_result(
             returncode=0,
-            stdout="/dev/sda1 on / type ext4 (rw,noatime)\ntmpfs on /tmp type tmpfs (rw,nosuid,nodev,size=100000k)\ntmpfs on /var/tmp type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\ntmpfs on /dev/shm type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\n"
+            stdout="/dev/sda1 on / type ext4 (rw,noatime)\ntmpfs on /tmp type tmpfs (rw,nosuid,nodev,size=100000k)\ntmpfs on /var/tmp type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\ntmpfs on /dev/shm type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\n",
         )
         env = _make_env(is_docker=False)
         result = _check_noexec_tmp(runner=runner, env=env)
@@ -186,7 +199,7 @@ class TestCheckNoexecTmp:
         runner = MagicMock()
         runner.return_value = _make_cmd_result(
             returncode=0,
-            stdout="/dev/sda1 on / type ext4 (rw,noatime)\ntmpfs on /tmp type tmpfs (rw,nosuid,nodev,size=100000k)\ntmpfs on /var/tmp type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\ntmpfs on /dev/shm type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\n"
+            stdout="/dev/sda1 on / type ext4 (rw,noatime)\ntmpfs on /tmp type tmpfs (rw,nosuid,nodev,size=100000k)\ntmpfs on /var/tmp type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\ntmpfs on /dev/shm type tmpfs (rw,nosuid,nodev,noexec,size=100000k)\n",
         )
         env = _make_env(is_docker=True)
         result = _check_noexec_tmp(runner=runner, env=env)
@@ -200,7 +213,9 @@ class TestCheckCoreDumps:
         runner = MagicMock()
         runner.side_effect = [
             _make_cmd_result(returncode=0, stdout="fs.suid_dumpable = 0\n"),
-            _make_cmd_result(returncode=0, stdout="kernel.core_pattern = |/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h\n"),
+            _make_cmd_result(
+                returncode=0, stdout="kernel.core_pattern = |/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h\n"
+            ),
             _make_cmd_result(returncode=0, stdout="MemoryMax=infinity\nTasksMax=infinity\n"),
         ]
         result = _check_core_dumps(runner=runner)
@@ -212,7 +227,9 @@ class TestCheckCoreDumps:
         runner = MagicMock()
         runner.side_effect = [
             _make_cmd_result(returncode=0, stdout="fs.suid_dumpable = 2\n"),
-            _make_cmd_result(returncode=0, stdout="kernel.core_pattern = |/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h\n"),
+            _make_cmd_result(
+                returncode=0, stdout="kernel.core_pattern = |/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h\n"
+            ),
             _make_cmd_result(returncode=0, stdout="MemoryMax=infinity\nTasksMax=infinity\n"),
         ]
         result = _check_core_dumps(runner=runner)
@@ -284,14 +301,15 @@ class TestCheckAppArmorSelinux:
 
 class TestRunChecks:
     def test_run_checks_returns_all_checks(self):
-        with patch("checks_system._check_auditd") as mock_auditd, \
-             patch("checks_system._check_unattended_upgrades") as mock_updates, \
-             patch("checks_system._check_reboot_required") as mock_reboot, \
-             patch("checks_system._check_noexec_tmp") as mock_noexec, \
-             patch("checks_system._check_core_dumps") as mock_core, \
-             patch("checks_system._check_time_sync") as mock_time, \
-             patch("checks_system._check_apparmor_selinux") as mock_mac:
-            
+        with (
+            patch("checks_system._check_auditd") as mock_auditd,
+            patch("checks_system._check_unattended_upgrades") as mock_updates,
+            patch("checks_system._check_reboot_required") as mock_reboot,
+            patch("checks_system._check_noexec_tmp") as mock_noexec,
+            patch("checks_system._check_core_dumps") as mock_core,
+            patch("checks_system._check_time_sync") as mock_time,
+            patch("checks_system._check_apparmor_selinux") as mock_mac,
+        ):
             mock_auditd.return_value = {"id": "SYS-001", "status": STATUS_PASS}
             mock_updates.return_value = {"id": "SYS-002", "status": STATUS_PASS}
             mock_reboot.return_value = {"id": "SYS-003", "status": STATUS_PASS}
@@ -299,7 +317,7 @@ class TestRunChecks:
             mock_core.return_value = {"id": "SYS-005", "status": STATUS_PASS}
             mock_time.return_value = {"id": "SYS-006", "status": STATUS_PASS}
             mock_mac.return_value = {"id": "SYS-007", "status": STATUS_PASS}
-            
+
             checks = run_checks()
             assert len(checks) == 7
             assert checks[0]["id"] == "SYS-001"

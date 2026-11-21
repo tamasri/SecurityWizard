@@ -1,12 +1,9 @@
 import os
-import sys
-import json
-import pytest
-from unittest.mock import patch, MagicMock
+
 from fastapi.testclient import TestClient
+
 import main
 import scanner
-import common
 
 
 def _mock_check(id, category, title, status, remediation_id=None):
@@ -22,7 +19,7 @@ def _mock_check(id, category, title, status, remediation_id=None):
         "recommended_value": "y",
         "details": [],
         "remediation_id": remediation_id,
-        "manual_command": ""
+        "manual_command": "",
     }
 
 
@@ -89,8 +86,9 @@ def test_scan_result_fix_state_no_remediation_old_code_fails(monkeypatch):
     result = scanner._build_result("2024-01-01T00:00:00Z", checks)
     # Old code: fix_state would be 'available' (wrong)
     # New code: fix_state must be 'none'
-    assert result["checks"][0]["fix_state"] == "none", \
+    assert result["checks"][0]["fix_state"] == "none", (
         "fix_state should be 'none' when remediation_id is None, got %r" % result["checks"][0]["fix_state"]
+    )
 
 
 def test_scan_result_fix_state_dry_run_only_old_code_fails(monkeypatch):
@@ -104,5 +102,6 @@ def test_scan_result_fix_state_dry_run_only_old_code_fails(monkeypatch):
     result = scanner._build_result("2024-01-01T00:00:00Z", checks)
     # Old code: fix_state would be 'available' (wrong)
     # New code: fix_state must be 'dry_run_only'
-    assert result["checks"][0]["fix_state"] == "dry_run_only", \
+    assert result["checks"][0]["fix_state"] == "dry_run_only", (
         "fix_state should be 'dry_run_only' when DRY_RUN_ONLY=1, got %r" % result["checks"][0]["fix_state"]
+    )

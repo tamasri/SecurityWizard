@@ -1,14 +1,17 @@
 """System checks: auditd, updates, reboot, noexec /tmp, core dumps, time sync, AppArmor/SELinux."""
+
 import logging
-import os
-import re
-from typing import List, Optional
+from typing import List
 
 from common import (
-    STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED,
-    make_check, skipped_check, run_cmd, read_text,
+    STATUS_INFO,
+    STATUS_PASS,
+    STATUS_WARNING,
+    make_check,
+    run_cmd,
+    skipped_check,
 )
-from envdetect import detect_environment, is_container_host, FakeRunner
+from envdetect import detect_environment
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +92,7 @@ def _check_unattended_upgrades(runner=None, fs=None) -> dict:
         runner = run_cmd
     if fs is None:
         from envdetect import _default_fs
+
         fs = _default_fs()
 
     # Check if unattended-upgrades package is installed
@@ -207,7 +211,7 @@ def _check_reboot_required(runner=None) -> dict:
             if len(parts) >= 2:
                 pkg_name = parts[1]
                 if pkg_name.startswith("linux-image-"):
-                    kernel_ver = pkg_name[len("linux-image-"):]
+                    kernel_ver = pkg_name[len("linux-image-") :]
                     installed_kernels.append(kernel_ver)
 
     if not installed_kernels:
@@ -286,7 +290,7 @@ def _check_noexec_tmp(runner=None, env=None) -> dict:
     # The `Environment` object has an `is_docker` attribute (from `_probe_docker`).
     # `is_container_host` likely checks if the current process is in a container.
     # So we should use `env.is_docker` instead of `is_container_host(env)`.
-    is_docker = getattr(env, 'is_docker', False)
+    is_docker = getattr(env, "is_docker", False)
 
     mount_result = runner(["mount"], timeout=10.0)
     if mount_result.returncode != 0:
@@ -333,7 +337,9 @@ def _check_noexec_tmp(runner=None, env=None) -> dict:
             title="Missing mount options",
             status=status,
             what_it_checks="Mount options for /tmp, /var/tmp, /dev/shm.",
-            risk="Executables can run from temporary directories." if not is_docker else "On Docker hosts, noexec may break some container operations.",
+            risk="Executables can run from temporary directories."
+            if not is_docker
+            else "On Docker hosts, noexec may break some container operations.",
             command="mount",
             current_value="; ".join(issues),
             recommended_value="Add noexec,nosuid,nodev to mount options",
@@ -381,7 +387,9 @@ def _check_core_dumps(runner=None) -> dict:
             issues.append("kernel.core_pattern={}".format(pattern))
 
     # Check systemd coredump limits
-    coredump_result = runner(["systemctl", "show", "systemd-coredump", "--property=MemoryMax", "--property=TasksMax"], timeout=10.0)
+    coredump_result = runner(
+        ["systemctl", "show", "systemd-coredump", "--property=MemoryMax", "--property=TasksMax"], timeout=10.0
+    )
     if coredump_result.returncode == 0:
         mem_max = ""
         tasks_max = ""
@@ -514,7 +522,7 @@ def _check_apparmor_selinux(runner=None) -> dict:
     if runner is None:
         runner = run_cmd
 
-    env = detect_environment()
+    detect_environment()
 
     # Check AppArmor
     apparmor_result = runner(["aa-status"], timeout=10.0)

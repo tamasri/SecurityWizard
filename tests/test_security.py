@@ -1,11 +1,8 @@
-import os
 import json
-import time
+
 import pytest
-from fastapi.testclient import TestClient
 
 import security
-import auth
 
 
 @pytest.fixture(autouse=True)
@@ -16,17 +13,17 @@ def setup_security(monkeypatch, tmp_path):
     monkeypatch.setenv("SECURITYWIZARD_BACKUP_DIR", str(tmp_path))
     monkeypatch.setenv("SECURITYWIZARD_AUDIT_LOG", str(tmp_path / "audit.log"))
     monkeypatch.setenv("SECURITYWIZARD_READONLY", "0")
-    
+
     # Initialize security
     security.init()
-    
+
     # Reset rate limits
     security._rate_limits = {
         "login": {},
         "apply": {},
         "rollback": {},
     }
-    
+
     yield
 
 
@@ -55,33 +52,37 @@ def test_validate_snapshot_id():
 
 def test_check_origin_allowed_no_origin():
     """Test origin check with no Origin/Referer header."""
+
     class MockRequest:
         headers = {}
-    
+
     assert security.check_origin_allowed(MockRequest()) is True
 
 
 def test_check_origin_allowed_matching_origin():
     """Test origin check with matching Origin header."""
+
     class MockRequest:
         headers = {"origin": "http://localhost"}
-    
+
     assert security.check_origin_allowed(MockRequest()) is True
 
 
 def test_check_origin_allowed_mismatching_origin():
     """Test origin check with mismatching Origin header."""
+
     class MockRequest:
         headers = {"origin": "http://evil.com"}
-    
+
     assert security.check_origin_allowed(MockRequest()) is False
 
 
 def test_check_origin_allowed_matching_referer():
     """Test origin check with matching Referer header."""
+
     class MockRequest:
         headers = {"referer": "http://127.0.0.1/page"}
-    
+
     assert security.check_origin_allowed(MockRequest()) is True
 
 
@@ -95,7 +96,7 @@ def test_check_rate_limit_blocks_excessive_requests():
     # Make 5 requests (limit is 5)
     for i in range(5):
         assert security.check_rate_limit("login", "127.0.0.1") is True
-    
+
     # 6th request should be blocked
     assert security.check_rate_limit("login", "127.0.0.1") is False
 
@@ -105,7 +106,7 @@ def test_check_rate_limit_different_ips():
     # Use up limit for first IP
     for i in range(5):
         security.check_rate_limit("login", "127.0.0.1")
-    
+
     # Different IP should still be allowed
     assert security.check_rate_limit("login", "192.168.1.1") is True
 
@@ -113,10 +114,10 @@ def test_check_rate_limit_different_ips():
 def test_audit_log_writes_entry(tmp_path):
     """Test audit log writes JSON lines."""
     security.audit_log("login", "127.0.0.1", result="success")
-    
+
     with open(tmp_path / "audit.log", "r") as f:
         line = f.readline().strip()
-    
+
     entry = json.loads(line)
     assert entry["action"] == "login"
     assert entry["client"] == "127.0.0.1"
@@ -127,10 +128,10 @@ def test_audit_log_writes_entry(tmp_path):
 def test_audit_log_filters_secrets(tmp_path):
     """Test audit log filters out secrets."""
     security.audit_log("login", "127.0.0.1", password="secret123", result="success")
-    
+
     with open(tmp_path / "audit.log", "r") as f:
         line = f.readline().strip()
-    
+
     entry = json.loads(line)
     assert "password" not in entry
     assert entry["result"] == "success"
@@ -140,7 +141,7 @@ def test_is_readoff_mode(monkeypatch):
     """Test read-only mode detection."""
     monkeypatch.setenv("SECURITYWIZARD_READONLY", "1")
     assert security.is_readonly() is True
-    
+
     monkeypatch.setenv("SECURITYWIZARD_READONLY", "0")
     assert security.is_readonly() is False
 

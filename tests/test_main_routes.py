@@ -1,5 +1,6 @@
 """Regression tests for the HTTP routes (previously broken: request model used as the HTTP request,
 shadowed /api/scan/status route, blocking scan start and scans never stored in the history)."""
+
 import threading
 import time
 
@@ -30,7 +31,13 @@ def client(monkeypatch):
 def _fake_scan(progress_cb=None):
     if progress_cb:
         progress_cb(1, 1, "network")
-    return {"checks": [{"id": "NET-001", "status": "PASS"}], "score": 100, "counts": {}, "started": "x", "finished": "y"}
+    return {
+        "checks": [{"id": "NET-001", "status": "PASS"}],
+        "score": 100,
+        "counts": {},
+        "started": "x",
+        "finished": "y",
+    }
 
 
 def _wait_finished(client, timeout=10.0):

@@ -1,11 +1,9 @@
-import os
-import re
 import glob
 import logging
-import tempfile
+import os
+import re
 
-from common import read_text, run_cmd, is_root
-from sshd_effective import listening_ssh_ports, effective_config
+from common import read_text
 
 logger = logging.getLogger("securitywizard")
 
@@ -13,7 +11,10 @@ logger = logging.getLogger("securitywizard")
 def _find_authorized_keys():
     """Check for valid public keys in /root and /home. Returns True if any valid key found."""
     key_prefixes = (
-        "ssh-rsa", "ssh-ed25519", "ecdsa-sha2-", "sk-ssh-ed25519@openssh.com",
+        "ssh-rsa",
+        "ssh-ed25519",
+        "ecdsa-sha2-",
+        "sk-ssh-ed25519@openssh.com",
     )
     key_files = ["/root/.ssh/authorized_keys"]
     try:
@@ -150,7 +151,9 @@ ACTIONS = {
     "ssh_permit_root_login": {
         "title": "Restrict Root SSH Login",
         "description": "Changes PermitRootLogin to prohibit-password so root can only log in with a public key, not a password. This is safe as long as at least one valid public key exists.",
-        "build_plan": lambda: _build_ssh_plan("PermitRootLogin", "prohibit-password", lockout_check=True, lockout_value="prohibit-password"),
+        "build_plan": lambda: _build_ssh_plan(
+            "PermitRootLogin", "prohibit-password", lockout_check=True, lockout_value="prohibit-password"
+        ),
     },
     "ssh_password_auth": {
         "title": "Disable SSH Password Authentication",

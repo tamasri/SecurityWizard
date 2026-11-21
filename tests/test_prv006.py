@@ -1,11 +1,9 @@
 """Tests for PRV-006: sshd_config permission evaluation."""
 
-import os
-import stat
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from checks_privilege import _check_sshd_config, _evaluate_sshd_config_permissions
-from common import STATUS_PASS, STATUS_CRITICAL, STATUS_INFO
+from common import STATUS_CRITICAL, STATUS_INFO, STATUS_PASS
 
 
 def test_sshd_config_0644_root_not_critical():
@@ -52,16 +50,16 @@ def test_sshd_config_non_root_owner_is_critical():
 
 def test_sshd_config_with_private_key_is_critical():
     """sshd_config containing a private key block should be critical."""
-    with patch('checks_privilege.os.path.isfile', return_value=True):
-        with patch('checks_privilege.read_text', return_value="RSA PRIVATE KEY-----\nabc\ndef\n"):
+    with patch("checks_privilege.os.path.isfile", return_value=True):
+        with patch("checks_privilege.read_text", return_value="RSA PRIVATE KEY-----\nabc\ndef\n"):
             status = _evaluate_sshd_config_permissions(0o644, 0)
             assert status == STATUS_CRITICAL
 
 
 def test_sshd_config_with_password_auth_is_critical():
     """sshd_config with PasswordAuthentication yes should be critical."""
-    with patch('checks_privilege.os.path.isfile', return_value=True):
-        with patch('checks_privilege.read_text', return_value="PasswordAuthentication yes\n"):
+    with patch("checks_privilege.os.path.isfile", return_value=True):
+        with patch("checks_privilege.read_text", return_value="PasswordAuthentication yes\n"):
             status = _evaluate_sshd_config_permissions(0o644, 0)
             assert status == STATUS_CRITICAL
 
@@ -73,9 +71,9 @@ def test_check_sshd_config_0644_root():
     mock_stat.st_uid = 0
     mock_stat.st_gid = 0
 
-    with patch('checks_privilege.os.path.isfile', return_value=True):
-        with patch('checks_privilege.os.stat', return_value=mock_stat):
-            with patch('checks_privilege.read_text', return_value=""):
+    with patch("checks_privilege.os.path.isfile", return_value=True):
+        with patch("checks_privilege.os.stat", return_value=mock_stat):
+            with patch("checks_privilege.read_text", return_value=""):
                 result = _check_sshd_config()
                 assert result["status"] != STATUS_CRITICAL
                 assert result["status"] == STATUS_INFO
@@ -88,9 +86,9 @@ def test_check_sshd_config_0666():
     mock_stat.st_uid = 0
     mock_stat.st_gid = 0
 
-    with patch('checks_privilege.os.path.isfile', return_value=True):
-        with patch('checks_privilege.os.stat', return_value=mock_stat):
-            with patch('checks_privilege.read_text', return_value=""):
+    with patch("checks_privilege.os.path.isfile", return_value=True):
+        with patch("checks_privilege.os.stat", return_value=mock_stat):
+            with patch("checks_privilege.read_text", return_value=""):
                 result = _check_sshd_config()
                 assert result["status"] == STATUS_CRITICAL
 
@@ -102,9 +100,9 @@ def test_check_sshd_config_non_root_owner():
     mock_stat.st_uid = 1000
     mock_stat.st_gid = 0
 
-    with patch('checks_privilege.os.path.isfile', return_value=True):
-        with patch('checks_privilege.os.stat', return_value=mock_stat):
-            with patch('checks_privilege.read_text', return_value=""):
+    with patch("checks_privilege.os.path.isfile", return_value=True):
+        with patch("checks_privilege.os.stat", return_value=mock_stat):
+            with patch("checks_privilege.read_text", return_value=""):
                 result = _check_sshd_config()
                 assert result["status"] == STATUS_CRITICAL
 
@@ -118,7 +116,7 @@ def test_shadow_0644_is_critical():
     mock_stat.st_uid = 0
     mock_stat.st_gid = 42
 
-    with patch('checks_privilege.os.path.isfile', return_value=True):
-        with patch('checks_privilege.os.stat', return_value=mock_stat):
+    with patch("checks_privilege.os.path.isfile", return_value=True):
+        with patch("checks_privilege.os.stat", return_value=mock_stat):
             result = _check_shadow()
             assert result["status"] == STATUS_CRITICAL

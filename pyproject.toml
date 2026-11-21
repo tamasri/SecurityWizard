@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "securitywizard"
+version = "2.0.0"
+description = "Self-hosted security audit and hardening dashboard for Ubuntu and Debian servers"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2",
+    "argon2-cffi>=23.1",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "pytest-timeout>=2.3",
+    "httpx>=0.27",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "bandit>=1.7",
+    "pip-audit>=2.7",
+    "pyyaml>=6",
+]
+
+[tool.setuptools]
+py-modules = [
+    "actions_network", "actions_ssh", "actions_system", "auth", "checks_access", "checks_docker", "checks_kernel",
+    "checks_logs", "checks_misc", "checks_network", "checks_privilege", "checks_ssh", "checks_system", "common",
+    "config", "deadman", "docker_ports", "envdetect", "export", "firewall", "history", "main", "remediator",
+    "scanner", "security", "sshd_effective", "sudoers_parse",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["venv", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E712", "E741", "F841", "E402"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = false
+warn_unused_ignores = false
+exclude = ["tests/", "venv/", ".venv/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --timeout=120"
+
+[tool.coverage.run]
+source = ["."]
+omit = ["tests/*", "venv/*", ".venv/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import os
 
-from common import read_text, run_cmd
-
+from common import run_cmd
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _file_exists(path: str) -> bool:
     """Return True if *path* exists and is a regular file."""
@@ -62,6 +62,7 @@ def _perm_plan(file_path: str, target_mode: int, title: str, description: str) -
 # sysctl_baseline
 # ---------------------------------------------------------------------------
 
+
 def _is_container_or_multihomed() -> bool:
     """
     Detect if the host requires loose rp_filter (mode 2) instead of strict (mode 1).
@@ -95,7 +96,7 @@ def _is_container_or_multihomed() -> bool:
     # 4. Multi-homed / Multiple default routes
     rc, out, _ = run_cmd(["ip", "route", "show", "default"])
     if rc == 0:
-        lines = [l for l in out.strip().splitlines() if l.strip()]
+        lines = [ln for ln in out.strip().splitlines() if ln.strip()]
         if len(lines) > 1:
             return True
 
@@ -145,7 +146,9 @@ def _build_sysctl_baseline() -> dict:
         content = _get_sysctl_content()
         warnings = []
         if _is_container_or_multihomed():
-            warnings.append("Using loose rp_filter (2) because Docker/Kubernetes/WireGuard/multi-homed environment detected.")
+            warnings.append(
+                "Using loose rp_filter (2) because Docker/Kubernetes/WireGuard/multi-homed environment detected."
+            )
         return {
             "file_changes": [{"path": "/etc/sysctl.d/99-securitywizard.conf", "new_content": content}],
             "perm_changes": [],
@@ -171,54 +174,105 @@ def _build_sysctl_baseline() -> dict:
 # Permission fixes
 # ---------------------------------------------------------------------------
 
+
 def _build_fix_perm_passwd() -> dict:
     try:
-        return _perm_plan("/etc/passwd", 0o644,
-                          "Fix /etc/passwd permissions",
-                          "Sets /etc/passwd to 0644 so all users can read it but only root can write.")
+        return _perm_plan(
+            "/etc/passwd",
+            0o644,
+            "Fix /etc/passwd permissions",
+            "Sets /etc/passwd to 0644 so all users can read it but only root can write.",
+        )
     except Exception:
-        return {"file_changes": [], "perm_changes": [], "validate_commands": [], "commands": [],
-                "inverse_commands": [], "warnings": [], "blockers": ["Unexpected error"]}
+        return {
+            "file_changes": [],
+            "perm_changes": [],
+            "validate_commands": [],
+            "commands": [],
+            "inverse_commands": [],
+            "warnings": [],
+            "blockers": ["Unexpected error"],
+        }
 
 
 def _build_fix_perm_shadow() -> dict:
     try:
-        return _perm_plan("/etc/shadow", 0o640,
-                          "Fix /etc/shadow permissions",
-                          "Sets /etc/shadow to 0640 so only root and the shadow group can read password hashes.")
+        return _perm_plan(
+            "/etc/shadow",
+            0o640,
+            "Fix /etc/shadow permissions",
+            "Sets /etc/shadow to 0640 so only root and the shadow group can read password hashes.",
+        )
     except Exception:
-        return {"file_changes": [], "perm_changes": [], "validate_commands": [], "commands": [],
-                "inverse_commands": [], "warnings": [], "blockers": ["Unexpected error"]}
+        return {
+            "file_changes": [],
+            "perm_changes": [],
+            "validate_commands": [],
+            "commands": [],
+            "inverse_commands": [],
+            "warnings": [],
+            "blockers": ["Unexpected error"],
+        }
 
 
 def _build_fix_perm_group() -> dict:
     try:
-        return _perm_plan("/etc/group", 0o644,
-                          "Fix /etc/group permissions",
-                          "Sets /etc/group to 0644 so all users can read group membership but only root can write.")
+        return _perm_plan(
+            "/etc/group",
+            0o644,
+            "Fix /etc/group permissions",
+            "Sets /etc/group to 0644 so all users can read group membership but only root can write.",
+        )
     except Exception:
-        return {"file_changes": [], "perm_changes": [], "validate_commands": [], "commands": [],
-                "inverse_commands": [], "warnings": [], "blockers": ["Unexpected error"]}
+        return {
+            "file_changes": [],
+            "perm_changes": [],
+            "validate_commands": [],
+            "commands": [],
+            "inverse_commands": [],
+            "warnings": [],
+            "blockers": ["Unexpected error"],
+        }
 
 
 def _build_fix_perm_sudoers() -> dict:
     try:
-        return _perm_plan("/etc/sudoers", 0o440,
-                          "Fix /etc/sudoers permissions",
-                          "Sets /etc/sudoers to 0440 so only root can read it and no user can modify sudo rules.")
+        return _perm_plan(
+            "/etc/sudoers",
+            0o440,
+            "Fix /etc/sudoers permissions",
+            "Sets /etc/sudoers to 0440 so only root can read it and no user can modify sudo rules.",
+        )
     except Exception:
-        return {"file_changes": [], "perm_changes": [], "validate_commands": [], "commands": [],
-                "inverse_commands": [], "warnings": [], "blockers": ["Unexpected error"]}
+        return {
+            "file_changes": [],
+            "perm_changes": [],
+            "validate_commands": [],
+            "commands": [],
+            "inverse_commands": [],
+            "warnings": [],
+            "blockers": ["Unexpected error"],
+        }
 
 
 def _build_fix_perm_sshd_config() -> dict:
     try:
-        return _perm_plan("/etc/ssh/sshd_config", 0o600,
-                          "Fix /etc/ssh/sshd_config permissions",
-                          "Sets /etc/ssh/sshd_config to 0600 so only root can read and modify SSH daemon settings.")
+        return _perm_plan(
+            "/etc/ssh/sshd_config",
+            0o600,
+            "Fix /etc/ssh/sshd_config permissions",
+            "Sets /etc/ssh/sshd_config to 0600 so only root can read and modify SSH daemon settings.",
+        )
     except Exception:
-        return {"file_changes": [], "perm_changes": [], "validate_commands": [], "commands": [],
-                "inverse_commands": [], "warnings": [], "blockers": ["Unexpected error"]}
+        return {
+            "file_changes": [],
+            "perm_changes": [],
+            "validate_commands": [],
+            "commands": [],
+            "inverse_commands": [],
+            "warnings": [],
+            "blockers": ["Unexpected error"],
+        }
 
 
 # ---------------------------------------------------------------------------
