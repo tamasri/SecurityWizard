@@ -62,6 +62,12 @@ async def index():
 async def health():
     return {"status": "ok"}
 
+@app.get("/api/status")
+async def get_status():
+    from common import is_root
+    dry_run_only = os.environ.get("SECURITYWIZARD_DRY_RUN_ONLY", "0") == "1"
+    return {"dry_run_only": dry_run_only, "is_root": is_root()}
+
 @app.post("/api/scan")
 async def start_scan(req: ScanRequest):
     job_id = str(uuid.uuid4())

@@ -25,6 +25,8 @@ function securityWizardApp() {
     scanning: false,
     progress: { done: 0, total: 6, current: '' },
     result: null,
+    dry_run_only: false,
+    is_root: false,
     severity: 'ALL',
     expanded: {},
     modal: {
@@ -45,6 +47,18 @@ function securityWizardApp() {
 
     init() {
       this.loadBackups();
+      this.loadStatus();
+    },
+
+    async loadStatus() {
+      try {
+        const s = await this.api('GET', '/api/status');
+        this.dry_run_only = s.dry_run_only;
+        this.is_root = s.is_root;
+      } catch (_) {
+        this.dry_run_only = false;
+        this.is_root = false;
+      }
     },
 
     async api(method, url, body = null) {
@@ -368,10 +382,22 @@ function securityWizardApp() {
                         <!-- Action Buttons -->
                         <div class="flex flex-wrap gap-2">
                             <button @click="copyCommand(check.manual_command || check.command)" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-1 rounded">Copy Manual Command</button>
-                            <template x-if="check.remediation_id">
+                            <template x-if="check.remediation_id && check.fix_state === 'available'">
                                 <div class="flex gap-2">
                                     <button @click="previewFix(check)" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded">Preview Fix</button>
                                     <button @click="previewFix(check)" class="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1 rounded">Apply Hardening</button>
+                                </div>
+                            </template>
+                            <template x-if="check.remediation_id && check.fix_state === 'dry_run_only'">
+                                <div class="flex gap-2 items-center">
+                                    <button @click="previewFix(check)" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded">Preview Fix</button>
+                                    <button disabled class="bg-gray-600 text-gray-400 text-xs px-3 py-1 rounded cursor-not-allowed" title="Apply is disabled: server runs in dry-run-only mode">Apply Hardening</button>
+                                    <span class="text-xs text-gray-400 italic">Apply is disabled: server runs in dry-run-only mode</span>
+                                </div>
+                            </template>
+                            <template x-if="!check.remediation_id || check.fix_state === 'none'">
+                                <div class="flex items-center">
+                                    <span class="text-xs text-gray-400 italic">No automatic fix available</span>
                                 </div>
                             </template>
                         </div>

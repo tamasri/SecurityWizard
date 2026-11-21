@@ -30,11 +30,18 @@ def _run_module(category, module_name):
 
 
 def _build_result(start_iso, checks):
+    import os
+    dry_run_only = os.environ.get("SECURITYWIZARD_DRY_RUN_ONLY", "0") == "1"
     counts = {STATUS_PASS: 0, STATUS_WARNING: 0, STATUS_CRITICAL: 0, STATUS_INFO: 0, STATUS_SKIPPED: 0}
     for c in checks:
         st = c.get("status", STATUS_SKIPPED)
         if st in counts:
             counts[st] += 1
+        rid = c.get("remediation_id")
+        if rid:
+            c["fix_state"] = "dry_run_only" if dry_run_only else "available"
+        else:
+            c["fix_state"] = "none"
     denom = counts[STATUS_PASS] + counts[STATUS_WARNING] + counts[STATUS_CRITICAL]
     if denom > 0:
         score = round(100 * (counts[STATUS_PASS] + 0.5 * counts[STATUS_WARNING]) / denom)
