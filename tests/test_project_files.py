@@ -33,12 +33,38 @@ def test_every_python_module_is_listed_in_the_package_metadata():
     assert present <= listed, sorted(present - listed)
 
 
-def test_requirements_pin_exact_versions():
-    for line in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or ";" in line:
+def _requirement_blocks(name):
+    """Split a pip-compile output into (requirement line, hash lines) blocks."""
+    blocks, current = [], None
+    for raw in (ROOT / name).read_text(encoding="utf-8").splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
             continue
-        assert re.search(r"==\d", line), line
+        if raw[0].isspace():
+            if current is not None and raw.strip().startswith("--hash=sha256:"):
+                current[1].append(raw.strip().rstrip("\\").strip())
+            continue
+        current = (raw.rstrip("\\").strip(), [])
+        blocks.append(current)
+    return blocks
+
+
+@pytest.mark.parametrize("name", ["requirements.txt", "requirements-dev.txt"])
+def test_lock_files_pin_every_package_with_hashes(name):
+    blocks = _requirement_blocks(name)
+    assert len(blocks) > 10
+    for line, hashes in blocks:
+        assert re.match(r"^[A-Za-z0-9._-]+==[0-9]", line), line
+        assert hashes, "no hash for " + line
+
+
+def test_lock_files_cover_the_direct_requirements():
+    runtime = {line.split("==")[0].lower() for line, _ in _requirement_blocks("requirements.txt")}
+    for direct in ("fastapi", "uvicorn", "pydantic", "argon2-cffi", "starlette"):
+        assert direct in runtime, direct
+    for name in ("requirements.in", "requirements-dev.in"):
+        for line in (ROOT / name).read_text(encoding="utf-8").splitlines():
+            if line and not line.startswith(("-", "#")):
+                assert "==" in line, "%s must pin every direct requirement exactly: %s" % (name, line)
 
 
 def test_ci_workflow_is_manual_only():

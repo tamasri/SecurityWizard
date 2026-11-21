@@ -117,7 +117,7 @@ def _atomic_write(path: str, content: str, orig_stat=None) -> None:
                 except (OSError, PermissionError):
                     pass
         else:
-            os.chmod(tmp, 0o644)
+            os.chmod(tmp, 0o640)  # new files are not world-readable; an existing file keeps its own mode
         os.replace(tmp, path)
     except Exception:
         if tmp and os.path.exists(tmp):

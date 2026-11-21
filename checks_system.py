@@ -320,7 +320,7 @@ def _check_noexec_tmp(runner=None, env=None) -> dict:
             mounts[mount_point] = options
 
     issues = []
-    for mp in ["/tmp", "/var/tmp", "/dev/shm"]:  # nosec B108
+    for mp in ["/tmp", "/var/tmp", "/dev/shm"]:  # nosec B108  # NOSONAR - names the mount points to inspect
         opts = mounts.get(mp, "")
         if "noexec" not in opts:
             issues.append("{} missing noexec".format(mp))

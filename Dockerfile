@@ -20,8 +20,10 @@ RUN useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin secur
 
 WORKDIR /app
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+RUN pip install --no-cache-dir --require-hashes --only-binary :all: -r requirements.txt
+COPY *.py ./
+COPY templates ./templates
+COPY static ./static
 
 USER securitywizard
 VOLUME ["/data"]

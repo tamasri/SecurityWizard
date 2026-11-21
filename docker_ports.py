@@ -60,7 +60,7 @@ def _get_published_ports() -> List[Dict[str, Any]]:
             if not part:
                 continue
             # Expect format like "host_ip:host_port->container_port/proto"
-            m = re.match(r"^(\[?[\d.]+|\[?[\da-f:]+\]?|\*|::)?:(\d+)->(\d+)/(tcp|udp|sctp)$", part)
+            m = re.match(r"^(\[?[\d.]+|\[?[\da-f:]+\]?|\*)?:(\d+)->(\d+)/(tcp|udp|sctp)$", part)
             if m:
                 raw_ip = m.group(1) or "0.0.0.0"
                 host_ip = raw_ip.strip("[]")

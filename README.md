@@ -77,6 +77,7 @@ Every login attempt, preview, apply, rollback and credential change is written t
 | `SECURITYWIZARD_BIND` | `127.0.0.1` | Address to bind. Keep it on loopback and use an SSH tunnel. |
 | `SECURITYWIZARD_ALLOWED_HOSTS` | `127.0.0.1,localhost,[::1]` | Accepted `Host` headers (add your domain when you put a reverse proxy in front). |
 | `SECURITYWIZARD_AUTH` | on | `0` turns the login off. Not recommended. |
+| `SECURITYWIZARD_COOKIE_SECURE` | auto | `1` forces the `Secure` flag on the session cookie (it is set automatically over HTTPS or behind a proxy that sends `X-Forwarded-Proto: https`). |
 | `SECURITYWIZARD_USERNAME` | `admin` | User name when the password comes from the environment. |
 | `SECURITYWIZARD_PASSWORD_HASH` | unset | Password hash (argon2 or PBKDF2) instead of generated credentials. |
 | `SECURITYWIZARD_PASSWORD_FILE` | unset | File containing that hash. |
@@ -149,13 +150,17 @@ Parsers are kept apart from the checks so they can be tested with real command o
 
 ```bash
 python -m venv venv && . venv/bin/activate
-pip install -r requirements-dev.txt
+pip install --require-hashes -r requirements-dev.txt   # hash-locked, see below
 pytest                      # tests never touch the real system: commands and files are mocked
 ruff check . && ruff format --check .
 mypy .
 bandit -c bandit.yaml -r . --exclude ./tests,./venv
 pip-audit -r requirements.txt
 ```
+
+Dependencies are locked with hashes: edit `requirements.in` / `requirements-dev.in` (exact versions) and regenerate the
+lock files with `pip-compile --generate-hashes --strip-extras --allow-unsafe requirements.in` (and the same for
+`requirements-dev.in`), ideally on the Python version you deploy with.
 
 A GitHub Actions workflow with the same jobs is included; it runs only when started manually.
 A `Dockerfile` is provided with documented limits: a container cannot audit the host faithfully.

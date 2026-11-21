@@ -113,11 +113,24 @@ def _with_headers(request: Request, response):
     return response
 
 
-def _session_response(content: Dict[str, Any], username: str) -> JSONResponse:
+def _cookie_secure(request: Request) -> bool:
+    """Mark the session cookie Secure whenever the page is served over HTTPS (directly or behind a proxy)."""
+    if os.environ.get("SECURITYWIZARD_COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes"):
+        return True
+    forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+    return request.url.scheme == "https" or forwarded == "https"
+
+
+def _session_response(request: Request, content: Dict[str, Any], username: str) -> JSONResponse:
     token = auth._create_session_token(username)
     response = JSONResponse(content=content)
     response.set_cookie(
-        auth.SESSION_COOKIE, token, httponly=True, samesite="strict", secure=False, max_age=auth.SESSION_MAX_AGE
+        auth.SESSION_COOKIE,
+        token,
+        httponly=True,
+        samesite="strict",
+        secure=_cookie_secure(request),
+        max_age=auth.SESSION_MAX_AGE,
     )
     return response
 
@@ -187,13 +200,13 @@ async def login(request: Request, body: LoginRequest):
         header = request.headers.get("authorization", "")
         if auth.request_user(request) and header.startswith("Bearer "):
             security.audit_log("login", client, result="success")
-            return _session_response({"ok": True}, "token-user")
+            return _session_response(request, {"ok": True}, "token-user")
     elif mode in ("credentials", "password"):
         username = body.username if body.username else (auth.get_username() if mode == "password" else "")
         if auth.verify_login(username or "", body.password):
             security.audit_log("login", client, result="success")
             return _session_response(
-                {"ok": True, "using_default_credentials": auth.using_default_credentials()}, username or ""
+                request, {"ok": True, "using_default_credentials": auth.using_default_credentials()}, username or ""
             )
     else:
         security.audit_log("login", client, result="error")
@@ -223,7 +236,7 @@ async def change_account(request: Request, body: ChangeCredentialsRequest):
     if not ok:
         return JSONResponse(status_code=400, content={"detail": message})
     # The change invalidates all older sessions: give this browser a fresh one.
-    return _session_response({"ok": True, "detail": message}, auth.get_username() or "user")
+    return _session_response(request, {"ok": True, "detail": message}, auth.get_username() or "user")
 
 
 @app.get("/api/status")
