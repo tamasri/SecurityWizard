@@ -17,6 +17,19 @@ import auth
 
 app = FastAPI(title="SecurityWizard", version="1.0.0")
 
+# --- Scan state ---
+_scan_lock = threading.Lock()
+_scan_state: Dict[str, Any] = {
+    "status": "idle",       # idle | running | finished
+    "job_id": None,
+    "started": None,
+    "finished": None,
+    "duration": None,
+    "progress": {"done": 0, "total": 0, "current": ""},
+    "result": None,
+    "error": None,
+}
+
 # --- Pydantic Models ---
 class ScanRequest(BaseModel):
     category: Optional[str] = None
@@ -120,44 +133,72 @@ async def get_status():
 
 @app.post("/api/scan")
 async def start_scan(req: ScanRequest):
-    job_id = str(uuid.uuid4())
-    
-    with jobs_lock:
-        jobs[job_id] = {
-            "status": "running",
-            "progress": {"done": 0, "total": 6 if not req.category else 1, "current": ""},
-            "result": None,
-            "error": None
-        }
-    
+    with _scan_lock:
+        if _scan_state["status"] == "running":
+            return {"job_id": _scan_state["job_id"], "already_running": True}
+
+        job_id = str(uuid.uuid4())
+        _scan_state["status"] = "running"
+        _scan_state["job_id"] = job_id
+        _scan_state["started"] = datetime.now(timezone.utc).isoformat()
+        _scan_state["finished"] = None
+        _scan_state["duration"] = None
+        _scan_state["progress"] = {"done": 0, "total": 7 if not req.category else 1, "current": ""}
+        _scan_state["result"] = None
+        _scan_state["error"] = None
+
+        with jobs_lock:
+            jobs[job_id] = {
+                "status": "running",
+                "progress": {"done": 0, "total": 7 if not req.category else 1, "current": ""},
+                "result": None,
+                "error": None,
+            }
+
     def run_job():
         try:
             def progress_cb(done, total, current):
                 with jobs_lock:
                     if job_id in jobs:
                         jobs[job_id]["progress"] = {"done": done, "total": total, "current": current}
-            
+                with _scan_lock:
+                    _scan_state["progress"] = {"done": done, "total": total, "current": current}
+
             if req.category:
                 result = scanner.run_category_scan(req.category)
                 with jobs_lock:
                     if job_id in jobs:
                         jobs[job_id]["progress"] = {"done": 1, "total": 1, "current": req.category}
+                with _scan_lock:
+                    _scan_state["progress"] = {"done": 1, "total": 1, "current": req.category}
             else:
                 result = scanner.run_full_scan(progress_cb)
-            
+
+            now_iso = datetime.now(timezone.utc).isoformat()
+            duration = (datetime.fromisoformat(now_iso) - datetime.fromisoformat(_scan_state["started"])).total_seconds()
             with jobs_lock:
                 if job_id in jobs:
                     jobs[job_id]["status"] = "done"
                     jobs[job_id]["result"] = result
-        except Exception as e:
+            with _scan_lock:
+                _scan_state["status"] = "finished"
+                _scan_state["finished"] = now_iso
+                _scan_state["duration"] = duration
+                _scan_state["result"] = result
+        except Exception as exc:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            duration = (datetime.fromisoformat(now_iso) - datetime.fromisoformat(_scan_state["started"])).total_seconds()
             with jobs_lock:
                 if job_id in jobs:
                     jobs[job_id]["status"] = "error"
-                    jobs[job_id]["error"] = str(e)
-    
-    thread = threading.Thread(target=run_job)
-    thread.start()
-    
+                    jobs[job_id]["error"] = str(exc)
+            with _scan_lock:
+                _scan_state["status"] = "finished"
+                _scan_state["finished"] = now_iso
+                _scan_state["duration"] = duration
+                _scan_state["error"] = str(exc)
+
+    await run_in_threadpool(run_job)
     return {"job_id": job_id}
 
 @app.get("/api/scan/{job_id}")
@@ -167,6 +208,12 @@ async def get_scan_status(job_id: str):
             raise HTTPException(status_code=404, detail="Job not found")
         job = jobs[job_id].copy()
     return job
+
+
+@app.get("/api/scan/status")
+async def get_scan_global_status():
+    with _scan_lock:
+        return dict(_scan_state)
 
 @app.post("/api/dry-run")
 async def dry_run(req: DryRunRequest):

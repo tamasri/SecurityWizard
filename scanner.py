@@ -1,6 +1,8 @@
 import importlib
 import logging
+import os
 import traceback
+import concurrent.futures
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -22,10 +24,59 @@ MODULES = [
 ]
 
 
+def _get_worker_count() -> int:
+    try:
+        return max(1, int(os.environ.get("SECURITYWIZARD_WORKERS", "8")))
+    except (ValueError, TypeError):
+        return 8
+
+
+def _get_check_timeout() -> float:
+    try:
+        return max(0.1, float(os.environ.get("SECURITYWIZARD_CHECK_TIMEOUT", "60")))
+    except (ValueError, TypeError):
+        return 60.0
+
+
 def _run_module(category: str, module_name: str) -> List[dict]:
     try:
         mod = importlib.import_module(module_name)
         return mod.run_checks()
+    except Exception as exc:
+        logger.exception("Unexpected error in %s module", module_name)
+        reason = "{}: {}".format(type(exc).__name__, exc)
+        return [skipped_check(
+            id="SCN-" + category,
+            category=category,
+            title="Module error",
+            what_it_checks="Failed to load the " + category + " checks module.",
+            risk="The " + category + " checks could not be evaluated.",
+            command=module_name,
+            reason=reason,
+        )]
+
+
+def _run_module_with_timeout(category: str, module_name: str, timeout: float) -> List[dict]:
+    """Run a module's checks in a thread with a timeout.
+
+    Returns the list of check dicts, or a single SKIPPED check if the timeout
+    is exceeded or an unexpected error occurs.
+    """
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_run_module, category, module_name)
+            return future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError:
+        logger.warning("Module %s timed out after %.1fs", module_name, timeout)
+        return [skipped_check(
+            id="SCN-" + category,
+            category=category,
+            title="Timed out",
+            what_it_checks="The " + category + " checks did not finish in time.",
+            risk="The " + category + " checks could not be evaluated within the time limit.",
+            command=module_name,
+            reason="timed out after {:.1f} s".format(timeout),
+        )]
     except Exception as exc:
         logger.exception("Unexpected error in %s module", module_name)
         reason = "{}: {}".format(type(exc).__name__, exc)
@@ -104,12 +155,43 @@ def _build_result(start_iso, checks):
 
 def run_full_scan(progress_cb=None):
     start_iso = datetime.now(timezone.utc).isoformat()
-    checks = []
+    workers = _get_worker_count()
+    timeout = _get_check_timeout()
     total = len(MODULES)
-    for i, (category, module_name) in enumerate(MODULES):
-        checks.extend(_run_module(category, module_name))
-        if progress_cb is not None:
-            progress_cb(i + 1, total, category)
+    module_results: List[Optional[List[dict]]] = [None] * total
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_index = {}
+        for i, (category, module_name) in enumerate(MODULES):
+            future = executor.submit(_run_module_with_timeout, category, module_name, timeout)
+            future_to_index[future] = i
+
+        for future in concurrent.futures.as_completed(future_to_index):
+            idx = future_to_index[future]
+            try:
+                module_results[idx] = future.result()
+            except Exception as exc:
+                logger.exception("Unexpected error collecting result for module at index %d", idx)
+                category, module_name = MODULES[idx]
+                reason = "{}: {}".format(type(exc).__name__, exc)
+                module_results[idx] = [skipped_check(
+                    id="SCN-" + category,
+                    category=category,
+                    title="Module error",
+                    what_it_checks="Failed to load the " + category + " checks module.",
+                    risk="The " + category + " checks could not be evaluated.",
+                    command=module_name,
+                    reason=reason,
+                )]
+            if progress_cb is not None:
+                # Report progress in module order, not completion order
+                done_count = sum(1 for r in module_results if r is not None)
+                progress_cb(done_count, total, MODULES[idx][0])
+
+    checks = []
+    for res in module_results:
+        if res is not None:
+            checks.extend(res)
     return _build_result(start_iso, checks)
 
 
