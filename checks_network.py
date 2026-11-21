@@ -36,7 +36,7 @@ def parse_ss_line(line: str):
     if not line:
         return None
     parts = line.split()
-    if len(parts) < 4:
+    if len(parts) < 5:
         return None
     proto = parts[0]
     state = parts[1]
@@ -363,7 +363,15 @@ def check_net_004():
             manual_command="",
         )
 
-    manual_cmd = "iptables -I DOCKER-USER -j RETURN -m comment --comment 'SecurityWizard: allow established' && iptables -I DOCKER-USER -j ACCEPT -m state --state ESTABLISHED,RELATED && iptables -I DOCKER-USER -j DROP -m comment --comment 'SecurityWizard: drop all other'"
+    # `iptables -I` puts a rule at the TOP, so the rules are inserted in reverse order of how they are evaluated:
+    # established traffic first, then the ports that must stay public, then new connections from the public interface.
+    # Only traffic arriving on the public interface is affected; container-to-container and outgoing traffic is not.
+    manual_cmd = (
+        "# Replace eth0 with your public network interface and repeat the middle command for every port that must stay public\n"
+        "iptables -I DOCKER-USER -i eth0 -m conntrack --ctstate NEW -j DROP && "
+        "iptables -I DOCKER-USER -i eth0 -p tcp -m conntrack --ctorigdstport 443 -j ACCEPT && "
+        "iptables -I DOCKER-USER -i eth0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT"
+    )
 
     return make_check(
         "NET-004",
