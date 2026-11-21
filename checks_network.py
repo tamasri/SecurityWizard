@@ -317,9 +317,15 @@ def check_net_003():
 
 def check_net_004():
     """NET-004: Docker published ports bypassing UFW (DOCKER-USER chain)."""
-    # First check if docker is available
-    rc_docker, _, err_docker = run_cmd(["docker", "--version"])
-    if rc_docker == 127:
+    from docker_ports import assess_docker_ports
+
+    result = assess_docker_ports()
+    status = result["status"]
+    current_value = result["current_value"]
+    recommended = result["recommended"]
+    details = result["details"]
+
+    if status == STATUS_SKIPPED:
         return make_check(
             "NET-004", "network",
             "Docker published ports bypassing UFW (DOCKER-USER chain)",
@@ -333,84 +339,14 @@ def check_net_004():
             "container ports are directly reachable from the network, bypassing "
             "any UFW restrictions an administrator may have configured.",
             "docker --version; iptables -L DOCKER-USER -n -v; docker ps --format '{{.Names}} {{.Ports}}'",
-            "Docker not installed; no container ports to check.",
+            current_value,
             "No action needed while Docker is absent.",
-            details=["Docker is not installed on this host."],
+            details=details,
             remediation_id="docker_user_isolation",
             manual_command="",
         )
 
-    # Docker is installed; check DOCKER-USER chain
-    rc_ipt, out_ipt, err_ipt = run_cmd(["iptables", "-L", "DOCKER-USER", "-n", "-v"])
-    if rc_ipt != 0:
-        return skipped_check(
-            "NET-004", "network",
-            "Docker published ports bypassing UFW (DOCKER-USER chain)",
-            "Checks whether Docker's DOCKER-USER iptables chain contains "
-            "isolation rules that restrict access to container published ports "
-            "before they reach the UFW firewall. Without these rules, published "
-            "ports bypass UFW entirely.",
-            "Docker inserts iptables rules in the DOCKER chain for published "
-            "ports, and these are evaluated before the DOCKER-USER chain. If "
-            "DOCKER-USER only has the default RETURN rule, container ports are "
-            "directly reachable from the network, bypassing any UFW restrictions.",
-            "iptables -L DOCKER-USER -n -v",
-            f"iptables returned error: {err_ipt.strip()}",
-            remediation_id="docker_user_isolation",
-        )
-
-    # Check if DOCKER-USER has only the default RETURN rule
-    has_only_return = True
-    for line in out_ipt.splitlines():
-        if line.strip().startswith("RETURN") and "0" in line:
-            continue
-        if line.strip().startswith("Chain DOCKER-USER"):
-            continue
-        if line.strip().startswith("target") or line.strip().startswith("pkts"):
-            continue
-        has_only_return = False
-        break
-
-    # Check for published ports
-    rc_ps, out_ps, _ = run_cmd(["docker", "ps", "--format", "{{.Names}} {{.Ports}}"])
-    published_ports = []
-    if rc_ps == 0:
-        for line in out_ps.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split()
-            if len(parts) >= 2:
-                port_str = parts[-1]
-                if "0.0.0.0" in port_str or "::" in port_str:
-                    published_ports.append(line)
-
-    if published_ports and has_only_return:
-        status = STATUS_CRITICAL
-        current_value = f"{len(published_ports)} published port(s) on 0.0.0.0, DOCKER-USER has only RETURN"
-        recommended = "Add DOCKER-USER chain rules to restrict access to container ports."
-        manual_cmd = "iptables -I DOCKER-USER -j RETURN -m comment --comment 'SecurityWizard: allow established' && iptables -I DOCKER-USER -j ACCEPT -m state --state ESTABLISHED,RELATED && iptables -I DOCKER-USER -j DROP -m comment --comment 'SecurityWizard: drop all other'"
-    elif published_ports:
-        status = STATUS_WARNING
-        current_value = f"{len(published_ports)} published port(s) on 0.0.0.0, DOCKER-USER has isolation rules"
-        recommended = "Review DOCKER-USER chain rules to ensure they cover all published ports."
-        manual_cmd = "iptables -L DOCKER-USER -n -v"
-    else:
-        status = STATUS_PASS
-        current_value = "No Docker published ports on 0.0.0.0"
-        recommended = "Keep container ports bound to 127.0.0.1 or add DOCKER-USER isolation rules."
-        manual_cmd = ""
-
-    details = []
-    if published_ports:
-        details.append("Published ports on 0.0.0.0:")
-        details.extend(published_ports)
-    else:
-        details.append("No Docker containers with published ports on 0.0.0.0.")
-    if has_only_return:
-        details.append("DOCKER-USER chain contains only the default RETURN rule.")
-    else:
-        details.append("DOCKER-USER chain contains custom isolation rules.")
+    manual_cmd = "iptables -I DOCKER-USER -j RETURN -m comment --comment 'SecurityWizard: allow established' && iptables -I DOCKER-USER -j ACCEPT -m state --state ESTABLISHED,RELATED && iptables -I DOCKER-USER -j DROP -m comment --comment 'SecurityWizard: drop all other'"
 
     return make_check(
         "NET-004", "network",
