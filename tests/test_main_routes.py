@@ -119,3 +119,12 @@ def test_security_headers_present(client):
     resp = client.get("/api/status")
     assert resp.headers["X-Frame-Options"] == "DENY"
     assert resp.headers["Cache-Control"] == "no-store"
+
+
+def test_deadman_confirm_endpoint(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(main.deadman, "confirm", lambda token, bdir: calls.append(token) or True)
+    assert client.post("/api/deadman/confirm", json={"token": "bad"}, headers=CSRF).status_code == 422
+    ok = client.post("/api/deadman/confirm", json={"token": "DM-SSH-001"}, headers=CSRF)
+    assert ok.status_code == 200 and ok.json() == {"ok": True} and calls == ["DM-SSH-001"]
+    assert client.get("/api/deadman").status_code == 200

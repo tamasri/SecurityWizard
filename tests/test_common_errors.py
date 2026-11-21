@@ -129,3 +129,17 @@ class TestReadText:
 class TestIsRoot:
     def test_is_root_returns_bool(self):
         assert isinstance(is_root(), bool)
+
+
+def test_cmd_result_supports_tuple_unpacking_and_attributes():
+    """Many checks unpack `rc, out, err = run_cmd(...)`; the result object must support both styles."""
+    import sys
+
+    from common import run_cmd
+
+    result = run_cmd([sys.executable, "-c", "import sys; print('hello'); sys.stderr.write('oops'); sys.exit(3)"])
+    rc, out, err = result
+    assert (rc, out.strip(), err) == (3, "hello", "oops")
+    assert result.returncode == 3 and result.stdout.strip() == "hello"
+    rc, out, err = run_cmd(["definitely-not-a-real-command-xyz"])
+    assert rc == 127 and out == ""

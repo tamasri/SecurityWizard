@@ -30,6 +30,12 @@ class CmdResult:
     def ok(self) -> bool:
         return self.returncode == 0 and not self.timed_out and not self.not_found
 
+    def __iter__(self):
+        """Allow ``rc, out, err = run_cmd(...)`` as well as attribute access."""
+        yield self.returncode
+        yield self.stdout
+        yield self.stderr
+
 
 def run_cmd(args: List[str], timeout: float = 20.0) -> CmdResult:
     """Run a command with an argument list (no shell).

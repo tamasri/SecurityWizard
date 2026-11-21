@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import threading
 import uuid
 from contextlib import asynccontextmanager
@@ -15,6 +16,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 import auth
+import deadman
 import export
 import history
 import remediator
@@ -71,6 +73,10 @@ class RemediateRequest(BaseModel):
 
 class RollbackRequest(BaseModel):
     snapshot_id: str
+
+
+class DeadmanRequest(BaseModel):
+    token: str
 
 
 class LoginRequest(BaseModel):
@@ -317,6 +323,27 @@ async def remediate(request: Request, req: RemediateRequest):
     result = await run_in_threadpool(remediator.apply, req.remediation_id, req.confirm)
     security.audit_log("apply", client, remediation_id=req.remediation_id, result="success")
     return result
+
+
+DEADMAN_TOKEN_RE = re.compile(r"^DM-[A-Z]{3}-\d{3}$")
+
+
+@app.get("/api/deadman")
+async def get_deadman():
+    """Tokens of risky changes that will be reverted automatically unless confirmed."""
+    return {"pending": deadman.pending(remediator._bdir())}
+
+
+@app.post("/api/deadman/confirm")
+async def confirm_deadman(request: Request, req: DeadmanRequest):
+    """Keep a risky change (SSH/firewall): cancels the automatic revert."""
+    if security.is_readonly():
+        return JSONResponse(status_code=403, content={"detail": "Read-only mode"})
+    if not DEADMAN_TOKEN_RE.match(req.token):
+        raise HTTPException(status_code=422, detail="Invalid token format")
+    ok = await run_in_threadpool(deadman.confirm, req.token, remediator._bdir())
+    security.audit_log("deadman_confirm", _client(request), result="success" if ok else "unknown_token")
+    return {"ok": ok}
 
 
 @app.get("/api/backups")

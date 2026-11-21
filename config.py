@@ -105,6 +105,12 @@ class Config:
                 return entry
         return None
 
+    def allowed_docker_privileged(self, name: str) -> Optional[DockerPrivilegedAllow]:
+        for entry in self.docker_privileged:
+            if entry.name == name:
+                return entry
+        return None
+
     def allowed_public_port(self, port: int, container: Optional[str] = None) -> Optional[DockerPublicPortAllow]:
         for entry in self.docker_public_ports:
             if entry.port != port:
