@@ -39,14 +39,16 @@ def test_validate_remediation_id():
 
 
 def test_validate_snapshot_id():
-    """Test snapshot ID validation."""
-    assert security.validate_snapshot_id("SNAP-abc12345") is True
-    assert security.validate_snapshot_id("SNAP-ABC12345") is True
-    assert security.validate_snapshot_id("SNAP-abc12345678901234567890123456789") is True
-    assert security.validate_snapshot_id("SNAP-abc") is False
-    assert security.validate_snapshot_id("SNAP-abc123456789012345678901234567890") is False
-    assert security.validate_snapshot_id("snap-abc12345") is False
-    assert security.validate_snapshot_id("SNAP_abc12345") is False
+    """Snapshot ids are exactly what the remediator creates: timestamp + remediation id."""
+    import remediator
+
+    assert security.validate_snapshot_id(remediator._snap_id("ssh_permit_root_login")) is True
+    assert security.validate_snapshot_id("20261121T093000_ufw_baseline") is True
+    assert security.validate_snapshot_id("SNAP-abc12345") is False
+    assert security.validate_snapshot_id("20261121T093000_") is False
+    assert security.validate_snapshot_id("20261121T093000_../etc") is False
+    assert security.validate_snapshot_id("../20261121T093000_ufw_baseline") is False
+    assert security.validate_snapshot_id("20261121_ufw_baseline") is False
     assert security.validate_snapshot_id("") is False
 
 

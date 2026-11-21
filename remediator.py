@@ -145,6 +145,10 @@ def _get_plan(rid: str) -> Optional[dict]:
 def _check_idempotent(plan: dict) -> bool:
     """Return True if the plan would change nothing (all file contents already
     match and all permissions already match)."""
+    if not plan.get("file_changes") and not plan.get("perm_changes"):
+        # Nothing to compare: a plan that only runs commands (for example the firewall baseline) can never be
+        # recognised as already applied, so its commands must run. They are written to be repeatable.
+        return not plan.get("commands")
     for fc in plan.get("file_changes", []):
         p = fc["path"]
         try:
@@ -326,13 +330,36 @@ def apply(remediation_id: str, confirm: bool = False, runner=None, precondition=
                 def _revert():
                     rollback(out["snapshot_id"])
 
-                deadman.arm(token, _revert, minutes, _bdir())
+                deadman.arm(
+                    token,
+                    _revert,
+                    minutes,
+                    _bdir(),
+                    info={"snapshot_id": out["snapshot_id"], "remediation_id": remediation_id},
+                )
                 out["deadman_token"] = token
                 out["deadline"] = deadline
     except Exception as e:
         logger.exception("apply(%s) failed", remediation_id)
         out["message"] = str(e)
     return out
+
+
+def recover_deadman() -> List[str]:
+    """After a restart: undo unconfirmed risky changes whose safety timer ran out, re-arm the others."""
+    bdir = _bdir()
+    states = deadman.get_state(bdir)
+
+    def revert_factory(token):
+        snapshot_id = states.get(token, {}).get("snapshot_id")
+
+        def revert():
+            if snapshot_id:
+                rollback(snapshot_id)
+
+        return revert
+
+    return deadman.recover_pending(bdir, revert_factory)
 
 
 def list_backups():

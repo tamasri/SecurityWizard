@@ -35,6 +35,12 @@ CSRF_HEADER_VALUE = "SecurityWizard"
 async def lifespan(_app: FastAPI):
     auth.init(os.environ.get("SECURITYWIZARD_BIND", "127.0.0.1"))
     security.init()
+    try:
+        recovered = remediator.recover_deadman()
+        if recovered:
+            logger.warning("Re-armed the safety timer of %d unconfirmed change(s)", len(recovered))
+    except Exception:
+        logger.exception("Could not process pending safety timers")
     yield
 
 

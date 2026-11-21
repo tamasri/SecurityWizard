@@ -10,6 +10,7 @@ from common import (
     make_check,
     skipped_check,
 )
+from config import get_config
 from sudoers_parse import classify_rule, parse_sudoers_paths
 
 logger = logging.getLogger(__name__)
@@ -263,11 +264,9 @@ def _check_sudoers(sudoers_paths: List[str]) -> List[dict]:
         ]
 
     for rule in rules:
-        classification = classify_rule(rule)
-        status = classification.get("status", STATUS_INFO)
-        risk = classification.get("reason", "")
+        status, risk = classify_rule(rule, get_config())
         user = rule.user
-        command = rule.command
+        command = ", ".join(rule.commands)
         results.append(
             make_check(
                 id="ACC-002",
@@ -283,7 +282,7 @@ def _check_sudoers(sudoers_paths: List[str]) -> List[dict]:
                     f"User: {user}",
                     f"Command: {command}",
                     f"Source: {rule.source_file}",
-                    f"Line: {rule.line_num}",
+                    f"Line: {rule.line}",
                 ],
             )
         )
@@ -344,6 +343,35 @@ def _check_docker_group(group_file_content: str) -> List[dict]:
     return results
 
 
+PASSWD_FILE = "/etc/passwd"
+ROOT_AUTHORIZED_KEYS = "/root/.ssh/authorized_keys"
+
+
+def _read_file(path: str) -> Tuple[Optional[str], Optional[str]]:
+    """Return (content, error). A missing file counts as an empty file; any other failure is an error."""
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read(), None
+    except FileNotFoundError:
+        return "", None
+    except Exception as exc:
+        logger.warning("Failed to read %s: %s", path, exc)
+        return None, str(exc)
+
+
+def _login_users_authorized_keys(passwd_content: str) -> dict:
+    """authorized_keys of every account whose home directory is under /home (field 6 of /etc/passwd)."""
+    keys = {}
+    for line in passwd_content.splitlines():
+        parts = line.strip().split(":")
+        if len(parts) < 7 or not parts[5].startswith("/home/"):
+            continue
+        content, _error = _read_file(parts[5].rstrip("/") + "/.ssh/authorized_keys")
+        if content:
+            keys[parts[0]] = content
+    return keys
+
+
 def run_checks(
     root_authorized_keys: Optional[str] = None,
     users_authorized_keys: Optional[dict] = None,
@@ -354,11 +382,8 @@ def run_checks(
 
     # ACC-001: authorized_keys
     if root_authorized_keys is None:
-        try:
-            with open("/root/.ssh/authorized_keys", "r", encoding="utf-8") as f:
-                root_authorized_keys = f.read()
-        except Exception as exc:
-            logger.warning("Failed to read root authorized_keys: %s", exc)
+        root_authorized_keys, error = _read_file(ROOT_AUTHORIZED_KEYS)
+        if error is not None:
             results.append(
                 skipped_check(
                     id="ACC-001",
@@ -367,26 +392,13 @@ def run_checks(
                     what_it_checks="SSH authorized_keys for root.",
                     risk="Could not evaluate root SSH keys.",
                     command="cat /root/.ssh/authorized_keys",
-                    reason=str(exc),
+                    reason=error,
                 )
             )
-    else:
+    if root_authorized_keys is not None:
         if users_authorized_keys is None:
-            users_authorized_keys = {}
-            try:
-                with open("/etc/passwd", "r", encoding="utf-8") as f:
-                    for line in f:
-                        parts = line.strip().split(":")
-                        if len(parts) >= 7 and parts[6].startswith("/home/"):
-                            user = parts[0]
-                            ak_path = "/home/{}/.ssh/authorized_keys".format(user)
-                            try:
-                                with open(ak_path, "r", encoding="utf-8") as f:
-                                    users_authorized_keys[user] = f.read()
-                            except Exception:
-                                pass
-            except Exception as exc:
-                logger.warning("Failed to enumerate users: %s", exc)
+            passwd_content, _error = _read_file(PASSWD_FILE)
+            users_authorized_keys = _login_users_authorized_keys(passwd_content or "")
         results.extend(_check_authorized_keys(root_authorized_keys, users_authorized_keys))
 
     # ACC-002: sudoers
@@ -396,11 +408,8 @@ def run_checks(
 
     # ACC-003: docker group
     if group_file_content is None:
-        try:
-            with open(GROUP_FILE, "r", encoding="utf-8") as f:
-                group_file_content = f.read()
-        except Exception as exc:
-            logger.warning("Failed to read group file: %s", exc)
+        group_file_content, error = _read_file(GROUP_FILE)
+        if error is not None:
             results.append(
                 skipped_check(
                     id="ACC-003",
@@ -409,10 +418,10 @@ def run_checks(
                     what_it_checks="Docker group membership.",
                     risk="Could not evaluate Docker group access.",
                     command="getent group docker",
-                    reason=str(exc),
+                    reason=error,
                 )
             )
-    else:
+    if group_file_content is not None:
         results.extend(_check_docker_group(group_file_content))
 
     return results

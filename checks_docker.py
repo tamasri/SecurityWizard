@@ -17,10 +17,10 @@ from config import get_config
 log = logging.getLogger("securitywizard.checks.docker")
 
 DANGEROUS_CAPS = {"SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE", "ALL"}
+# The Docker socket is reported by DOC-003 (with its allowlist) and is deliberately not repeated here.
 SENSITIVE_HOST_PATHS = {
     "/",
     "/etc",
-    "/var/run/docker.sock",
     "/root",
     "/home",
     "/boot",

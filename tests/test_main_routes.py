@@ -113,7 +113,7 @@ def test_remediate_validates_id_and_honours_readonly(client, monkeypatch):
 def test_rollback_validates_id(client, monkeypatch):
     monkeypatch.setattr(remediator, "rollback", lambda sid: {"rolled_back": sid})
     assert client.post("/api/rollback", json={"snapshot_id": "bad id"}, headers=CSRF).status_code == 422
-    ok = client.post("/api/rollback", json={"snapshot_id": "SNAP-abcdef123456"}, headers=CSRF)
+    ok = client.post("/api/rollback", json={"snapshot_id": "20261121T093000_ufw_baseline"}, headers=CSRF)
     assert ok.status_code == 200
 
 

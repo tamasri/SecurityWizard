@@ -414,11 +414,11 @@ def _evaluate_sshd_config_permissions(mode: int, uid: int) -> str:
     sshd_config is the distro default at 0644 and is not secret.
     Returns STATUS_PASS for 0640/0600, STATUS_INFO for 0644, and
     STATUS_CRITICAL when group/world writable, not owned by root,
-    or when the file contains secrets (private key blocks or
-    password-like values).
+    or when the file contains a private key block. Settings such as
+    PasswordAuthentication are not secrets (the SSH checks evaluate them).
     """
     # Critical: group or world writable
-    if mode & 0o020:
+    if mode & 0o022:
         return STATUS_CRITICAL
     # Critical: not owned by root
     if uid != 0:
@@ -428,11 +428,6 @@ def _evaluate_sshd_config_permissions(mode: int, uid: int) -> str:
     if os.path.isfile(path):
         content = read_text(path)
         if "PRIVATE KEY" in content or "RSA PRIVATE KEY" in content or "OPENSSH PRIVATE KEY" in content:
-            return STATUS_CRITICAL
-        if (
-            "PasswordAuthentication" in content
-            and "yes" in content.split("PasswordAuthentication")[-1].split("\n")[0].lower()
-        ):
             return STATUS_CRITICAL
     # 0644 is the distro default: INFO
     if mode == 0o644:

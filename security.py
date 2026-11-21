@@ -13,8 +13,8 @@ logger = logging.getLogger("securitywizard")
 # This is only the format check; the registry in remediator.ACTIONS is the real allowlist.
 REMEDIATION_ID_RE = re.compile(r"^[a-z][a-z0-9_]{2,63}$")
 
-# Regex for snapshot IDs (e.g., SNAP-abc12345)
-SNAPSHOT_ID_RE = re.compile(r"^SNAP-[a-zA-Z0-9]{8,32}$")
+# Snapshot ids are created by remediator._snap_id: <UTC timestamp>_<remediation id>, e.g. 20261121T093000_ssh_x11_forwarding
+SNAPSHOT_ID_RE = re.compile(r"^\d{8}T\d{6}_[a-z][a-z0-9_]{2,63}$")
 
 # Allowed hosts for Origin/Referer validation
 ALLOWED_HOSTS: List[str] = []

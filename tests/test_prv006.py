@@ -56,12 +56,19 @@ def test_sshd_config_with_private_key_is_critical():
             assert status == STATUS_CRITICAL
 
 
-def test_sshd_config_with_password_auth_is_critical():
-    """sshd_config with PasswordAuthentication yes should be critical."""
-    with patch("checks_privilege.os.path.isfile", return_value=True):
-        with patch("checks_privilege.read_text", return_value="PasswordAuthentication yes\n"):
-            status = _evaluate_sshd_config_permissions(0o644, 0)
-            assert status == STATUS_CRITICAL
+def test_sshd_config_password_auth_setting_is_not_a_secret():
+    """A PasswordAuthentication line (or its commented default) is a setting, not a secret: the SSH checks judge it."""
+    for content in ("PasswordAuthentication yes\n", "#PasswordAuthentication yes\nPasswordAuthentication no\n"):
+        with patch("checks_privilege.os.path.isfile", return_value=True):
+            with patch("checks_privilege.read_text", return_value=content):
+                assert _evaluate_sshd_config_permissions(0o644, 0) == STATUS_INFO
+
+
+def test_sshd_config_world_writable_only_is_critical():
+    """0646 is writable by others but not by the group; it must still be critical."""
+    with patch("checks_privilege.os.path.isfile", return_value=False):
+        assert _evaluate_sshd_config_permissions(0o646, 0) == STATUS_CRITICAL
+        assert _evaluate_sshd_config_permissions(0o602, 0) == STATUS_CRITICAL
 
 
 def test_check_sshd_config_0644_root():

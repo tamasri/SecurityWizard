@@ -73,10 +73,11 @@ def _is_container_or_multihomed() -> bool:
         if rc2 == 0:
             gateways = set()
             for line in out2.strip().splitlines():
-                if "via" in line:
-                    parts = line.split()
-                    if len(parts) > 1:
-                        gateways.add(parts[1])
+                parts = line.split()
+                if "via" in parts:
+                    index = parts.index("via")
+                    if index + 1 < len(parts):
+                        gateways.add(parts[index + 1])
             if len(gateways) > 1:
                 return True
 
