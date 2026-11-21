@@ -1,5 +1,6 @@
 """checks_kernel.py - Kernel & Network Stack Hardening (sysctl) checks."""
 
+import os
 import re
 
 from common import (
@@ -12,6 +13,77 @@ from common import (
     make_check,
     skipped_check,
 )
+
+
+def _is_container_or_multihomed() -> bool:
+    """
+    Detect if the host requires loose rp_filter (mode 2) instead of strict (mode 1).
+    True if:
+    - Docker is present (/var/lib/docker or docker binary)
+    - Kubernetes is present (/etc/kubernetes or kubelet)
+    - WireGuard is present (/etc/wireguard or wg binary)
+    - Multiple default routes or >1 non-loopback interface with a gateway
+    """
+    # 1. Docker
+    if os.path.isdir("/var/lib/docker"):
+        return True
+    rc, _, _ = run_cmd(["which", "docker"])
+    if rc == 0:
+        return True
+
+    # 2. Kubernetes
+    if os.path.isdir("/etc/kubernetes"):
+        return True
+    rc, _, _ = run_cmd(["which", "kubelet"])
+    if rc == 0:
+        return True
+
+    # 3. WireGuard
+    if os.path.isdir("/etc/wireguard"):
+        return True
+    rc, _, _ = run_cmd(["which", "wg"])
+    if rc == 0:
+        return True
+
+    # 4. Multi-homed / Multiple default routes
+    rc, out, _ = run_cmd(["ip", "route", "show", "default"])
+    if rc == 0:
+        lines = [l for l in out.strip().splitlines() if l.strip()]
+        if len(lines) > 1:
+            return True
+
+    # 5. >1 non-loopback interface with a gateway
+    rc, out, _ = run_cmd(["ip", "-o", "-4", "addr", "show"])
+    if rc == 0:
+        non_loopback_with_gw = 0
+        for line in out.strip().splitlines():
+            if "lo:" in line:
+                continue
+            if "inet" in line:
+                non_loopback_with_gw += 1
+                # Check for default route via this interface implicitly by counting interfaces
+                # Actually, the "multiple default routes" check above covers the routing table.
+                # The requirement says: "more than one default-route or >1 non-loopback interface with its own gateway"
+                # The "ip route show default" check is the most reliable for "multiple default routes".
+                # The "non-loopback interface with its own gateway" is tricky without parsing routes per interface.
+                # We'll stick to the multi-default-route check as the primary multi-homed indicator.
+                pass
+        # If we didn't return True on multiple default routes, we might still have a multi-homed host
+        # where interfaces have gateways but no multiple default routes (e.g., static routes).
+        # But the requirement specifically mentions "more than one default-route OR >1 non-loopback interface with its own gateway".
+        # Let's check for gateways on interfaces.
+        rc2, out2, _ = run_cmd(["ip", "-o", "-4", "route", "show"])
+        if rc2 == 0:
+            gateways = set()
+            for line in out2.strip().splitlines():
+                if "via" in line:
+                    parts = line.split()
+                    if len(parts) > 1:
+                        gateways.add(parts[1])
+            if len(gateways) > 1:
+                return True
+
+    return False
 
 
 def _read_sysctl(key: str) -> tuple[bool, str]:
@@ -38,37 +110,62 @@ def _check_rpf() -> dict:
                 "sysctl_baseline",
             )
 
+        multi_homed = _is_container_or_multihomed()
         current = f"all={val_all}, default={val_def}"
         details = [
             f"net.ipv4.conf.all.rp_filter = {val_all}",
             f"net.ipv4.conf.default.rp_filter = {val_def}",
         ]
 
-        if val_all == "1" and val_def == "1":
-            status = STATUS_PASS
-            rec = "1 (strict)"
-            manual = "sysctl -w net.ipv4.conf.all.rp_filter=1 net.ipv4.conf.default.rp_filter=1"
-        elif val_all == "2" and val_def == "2":
-            status = STATUS_WARNING
-            rec = "1 (strict)"
-            manual = "sysctl -w net.ipv4.conf.all.rp_filter=1 net.ipv4.conf.default.rp_filter=1"
-        elif val_all == "0" or val_def == "0":
-            status = STATUS_CRITICAL
-            rec = "1 (strict)"
-            manual = "sysctl -w net.ipv4.conf.all.rp_filter=1 net.ipv4.conf.default.rp_filter=1"
+        if multi_homed:
+            if val_all == "2" and val_def == "2":
+                status = STATUS_PASS
+                rec = "2 (loose)"
+                manual = "sysctl -w net.ipv4.conf.all.rp_filter=2 net.ipv4.conf.default.rp_filter=2"
+                details.append("Loose mode (2) is appropriate for Docker/Kubernetes/WireGuard/multi-homed hosts.")
+            elif val_all == "1" and val_def == "1":
+                status = STATUS_PASS
+                rec = "1 (strict) or 2 (loose)"
+                manual = "sysctl -w net.ipv4.conf.all.rp_filter=2 net.ipv4.conf.default.rp_filter=2"
+                details.append("Strict mode (1) is acceptable, but loose (2) is recommended for containerized environments.")
+            elif val_all == "0" or val_def == "0":
+                status = STATUS_WARNING
+                rec = "2 (loose)"
+                manual = "sysctl -w net.ipv4.conf.all.rp_filter=2 net.ipv4.conf.default.rp_filter=2"
+                details.append("rp_filter is disabled (0); loose mode (2) is recommended to avoid breaking container networking.")
+            else:
+                status = STATUS_WARNING
+                rec = "2 (loose)"
+                manual = "sysctl -w net.ipv4.conf.all.rp_filter=2 net.ipv4.conf.default.rp_filter=2"
+                details.append("Mixed rp_filter values; loose mode (2) is recommended for consistency on containerized hosts.")
         else:
-            status = STATUS_WARNING
-            rec = "1 (strict)"
-            manual = "sysctl -w net.ipv4.conf.all.rp_filter=1 net.ipv4.conf.default.rp_filter=1"
+            if val_all == "1" and val_def == "1":
+                status = STATUS_PASS
+                rec = "1 (strict)"
+                manual = "sysctl -w net.ipv4.conf.all.rp_filter=1 net.ipv4.conf.default.rp_filter=1"
+            elif val_all == "2" and val_def == "2":
+                status = STATUS_WARNING
+                rec = "1 (strict)"
+                manual = "sysctl -w net.ipv4.conf.all.rp_filter=1 net.ipv4.conf.default.rp_filter=1"
+            elif val_all == "0" or val_def == "0":
+                status = STATUS_CRITICAL
+                rec = "1 (strict)"
+                manual = "sysctl -w net.ipv4.conf.all.rp_filter=1 net.ipv4.conf.default.rp_filter=1"
+            else:
+                status = STATUS_WARNING
+                rec = "1 (strict)"
+                manual = "sysctl -w net.ipv4.conf.all.rp_filter=1 net.ipv4.conf.default.rp_filter=1"
 
         return make_check(
             "KRN-001", "kernel",
             "rp_filter = 1 for all and default (anti IP spoofing)",
             status,
             "Reverse path filtering verifies that the source IP of an incoming packet can be routed back via the same interface it arrived on. "
-            "Strict mode (1) drops packets whose source is unreachable via the receiving interface, blocking common IP-spoofing attacks.",
+            "Strict mode (1) drops packets whose source is unreachable via the receiving interface, blocking common IP-spoofing attacks. "
+            "Loose mode (2) only checks that the source is reachable via some interface, which is necessary for asymmetric routing in containerized environments.",
             "Without strict rp_filter, an attacker on the same network segment can forge source addresses to bypass stateful firewalls, "
-            "poison ARP caches, and inject traffic that appears to come from trusted hosts.",
+            "poison ARP caches, and inject traffic that appears to come from trusted hosts. "
+            "On containerized hosts, strict mode can break Docker/Kubernetes networking, so loose mode is accepted.",
             "sysctl -n net.ipv4.conf.all.rp_filter net.ipv4.conf.default.rp_filter",
             current,
             rec,
