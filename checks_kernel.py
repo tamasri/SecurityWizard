@@ -472,7 +472,7 @@ def _check_kptr_restrict() -> dict:
         if not found:
             return skipped_check(
                 "KRN-007", "kernel",
-                "kernel.kptr_restrict = 2 (kernel pointer protection)",
+                "kernel.kptr_restrict >= 1 (kernel pointer protection)",
                 "Checks that kernel pointer addresses are hidden from unprivileged users.",
                 "Exposing kernel pointer addresses helps attackers defeat KASLR and craft reliable kernel exploits.",
                 "sysctl -n kernel.kptr_restrict",
@@ -483,11 +483,16 @@ def _check_kptr_restrict() -> dict:
         current = val
         details = [f"kernel.kptr_restrict = {val}"]
 
-        if val == "2":
+        try:
+            v = int(val)
+        except ValueError:
+            v = -1
+
+        if v == 2:
             status = STATUS_PASS
             rec = "2 (hidden from all unprivileged)"
             manual = "sysctl -w kernel.kptr_restrict=2"
-        elif val == "1":
+        elif v == 1:
             status = STATUS_WARNING
             rec = "2 (hidden from all unprivileged)"
             manual = "sysctl -w kernel.kptr_restrict=2"
@@ -498,7 +503,7 @@ def _check_kptr_restrict() -> dict:
 
         return make_check(
             "KRN-007", "kernel",
-            "kernel.kptr_restrict = 2 (kernel pointer protection)",
+            "kernel.kptr_restrict >= 1 (kernel pointer protection)",
             status,
             "Kernel pointer addresses are exposed in /proc/kallsyms and other interfaces. Setting kptr_restrict to 2 hides these addresses "
             "from all unprivileged processes, protecting the effectiveness of KASLR (Kernel Address Space Layout Randomization).",
@@ -514,10 +519,462 @@ def _check_kptr_restrict() -> dict:
     except Exception as exc:
         return skipped_check(
             "KRN-007", "kernel",
-            "kernel.kptr_restrict = 2 (kernel pointer protection)",
+            "kernel.kptr_restrict >= 1 (kernel pointer protection)",
             "Checks that kernel pointer addresses are hidden from unprivileged users.",
             "Exposing kernel pointer addresses helps attackers defeat KASLR and craft reliable kernel exploits.",
             "sysctl -n kernel.kptr_restrict",
+            f"Unexpected error: {exc}",
+            "sysctl_baseline",
+        )
+
+
+def _check_bpf_jit_harden() -> dict:
+    try:
+        found, val = _read_sysctl("net.core.bpf_jit_harden")
+        if not found:
+            return skipped_check(
+                "KRN-008", "kernel",
+                "net.core.bpf_jit_harden = 2 (BPF JIT hardening)",
+                "Checks that BPF JIT hardening is set to the strictest mode.",
+                "Without JIT hardening, BPF programs may execute with less strict register checking, potentially allowing memory corruption.",
+                "sysctl -n net.core.bpf_jit_harden",
+                "net.core.bpf_jit_harden not found (kernel may not support BPF JIT hardening)",
+                "sysctl_baseline",
+            )
+
+        current = val
+        details = [f"net.core.bpf_jit_harden = {val}"]
+
+        try:
+            v = int(val)
+        except ValueError:
+            v = -1
+
+        if v == 2:
+            status = STATUS_PASS
+            rec = "2 (strict)"
+            manual = "sysctl -w net.core.bpf_jit_harden=2"
+        elif v == 1:
+            status = STATUS_WARNING
+            rec = "2 (strict)"
+            manual = "sysctl -w net.core.bpf_jit_harden=2"
+        else:
+            status = STATUS_CRITICAL
+            rec = "2 (strict)"
+            manual = "sysctl -w net.core.bpf_jit_harden=2"
+
+        return make_check(
+            "KRN-008", "kernel",
+            "net.core.bpf_jit_harden = 2 (BPF JIT hardening)",
+            status,
+            "BPF JIT hardening controls the strictness of the BPF Just-In-Time compiler's register checking. "
+            "Mode 2 (strict) adds extra checks to prevent potential memory corruption vulnerabilities in BPF programs.",
+            "Insufficient BPF JIT hardening can allow memory corruption attacks through crafted BPF programs, "
+            "leading to privilege escalation or denial of service.",
+            "sysctl -n net.core.bpf_jit_harden",
+            current,
+            rec,
+            details,
+            "sysctl_baseline",
+            manual,
+        )
+    except Exception as exc:
+        return skipped_check(
+            "KRN-008", "kernel",
+            "net.core.bpf_jit_harden = 2 (BPF JIT hardening)",
+            "Checks that BPF JIT hardening is set to the strictest mode.",
+            "Without JIT hardening, BPF programs may execute with less strict register checking, potentially allowing memory corruption.",
+            "sysctl -n net.core.bpf_jit_harden",
+            f"Unexpected error: {exc}",
+            "sysctl_baseline",
+        )
+
+
+def _check_tcp_rfc1337() -> dict:
+    try:
+        found, val = _read_sysctl("net.ipv4.tcp_rfc1337")
+        if not found:
+            return skipped_check(
+                "KRN-009", "kernel",
+                "net.ipv4.tcp_rfc1337 = 1 (TCP TIME_WAIT assassination protection)",
+                "Checks that TCP TIME_WAIT assassination protection is enabled.",
+                "Without RFC 1337 protection, an attacker can send a FIN packet to close a connection in TIME_WAIT state, disrupting legitimate connections.",
+                "sysctl -n net.ipv4.tcp_rfc1337",
+                "net.ipv4.tcp_rfc1337 not found",
+                "sysctl_baseline",
+            )
+
+        current = val
+        details = [f"net.ipv4.tcp_rfc1337 = {val}"]
+
+        if val == "1":
+            status = STATUS_PASS
+            rec = "1 (enabled)"
+            manual = "sysctl -w net.ipv4.tcp_rfc1337=1"
+        else:
+            status = STATUS_WARNING
+            rec = "1 (enabled)"
+            manual = "sysctl -w net.ipv4.tcp_rfc1337=1"
+
+        return make_check(
+            "KRN-009", "kernel",
+            "net.ipv4.tcp_rfc1337 = 1 (TCP TIME_WAIT assassination protection)",
+            status,
+            "TCP RFC 1337 protection prevents an attacker from sending a FIN packet to a connection in TIME_WAIT state, "
+            "which would otherwise close the connection prematurely and disrupt legitimate communication.",
+            "An attacker can exploit the lack of RFC 1337 protection to terminate legitimate TCP connections by sending forged FIN packets, "
+            "causing application-level failures and potential denial of service.",
+            "sysctl -n net.ipv4.tcp_rfc1337",
+            current,
+            rec,
+            details,
+            "sysctl_baseline",
+            manual,
+        )
+    except Exception as exc:
+        return skipped_check(
+            "KRN-009", "kernel",
+            "net.ipv4.tcp_rfc1337 = 1 (TCP TIME_WAIT assassination protection)",
+            "Checks that TCP TIME_WAIT assassination protection is enabled.",
+            "Without RFC 1337 protection, an attacker can send a FIN packet to close a connection in TIME_WAIT state, disrupting legitimate connections.",
+            "sysctl -n net.ipv4.tcp_rfc1337",
+            f"Unexpected error: {exc}",
+            "sysctl_baseline",
+        )
+
+
+def _check_secure_redirects() -> dict:
+    try:
+        found_all, val_all = _read_sysctl("net.ipv4.conf.all.secure_redirects")
+        found_def, val_def = _read_sysctl("net.ipv4.conf.default.secure_redirects")
+
+        if not found_all or not found_def:
+            return skipped_check(
+                "KRN-010", "kernel",
+                "net.ipv4.conf.all.secure_redirects = 0 and default = 0 (secure ICMP redirects)",
+                "Checks that the kernel only accepts ICMP redirects from default gateways.",
+                "An attacker can send forged ICMP redirects from non-gateway hosts to reroute traffic.",
+                "sysctl -n net.ipv4.conf.all.secure_redirects net.ipv4.conf.default.secure_redirects",
+                "secure_redirects keys not found (kernel may lack IPv4)",
+                "sysctl_baseline",
+            )
+
+        current = f"all={val_all}, default={val_def}"
+        details = [
+            f"net.ipv4.conf.all.secure_redirects = {val_all}",
+            f"net.ipv4.conf.default.secure_redirects = {val_def}",
+        ]
+
+        if val_all == "0" and val_def == "0":
+            status = STATUS_PASS
+            rec = "0 (only accept from default gateways)"
+            manual = "sysctl -w net.ipv4.conf.all.secure_redirects=0 net.ipv4.conf.default.secure_redirects=0"
+        else:
+            status = STATUS_WARNING
+            rec = "0 (only accept from default gateways)"
+            manual = "sysctl -w net.ipv4.conf.all.secure_redirects=0 net.ipv4.conf.default.secure_redirects=0"
+
+        return make_check(
+            "KRN-010", "kernel",
+            "net.ipv4.conf.all.secure_redirects = 0 and default = 0 (secure ICMP redirects)",
+            status,
+            "Secure ICMP redirects restrict the acceptance of ICMP redirect messages to only those coming from default gateways. "
+            "This prevents redirects from arbitrary hosts on the network.",
+            "An attacker on the same network segment can send forged ICMP redirects from non-gateway hosts to reroute traffic through a malicious path, "
+            "enabling man-in-the-middle attacks.",
+            "sysctl -n net.ipv4.conf.all.secure_redirects net.ipv4.conf.default.secure_redirects",
+            current,
+            rec,
+            details,
+            "sysctl_baseline",
+            manual,
+        )
+    except Exception as exc:
+        return skipped_check(
+            "KRN-010", "kernel",
+            "net.ipv4.conf.all.secure_redirects = 0 and default = 0 (secure ICMP redirects)",
+            "Checks that the kernel only accepts ICMP redirects from default gateways.",
+            "An attacker can send forged ICMP redirects from non-gateway hosts to reroute traffic.",
+            "sysctl -n net.ipv4.conf.all.secure_redirects net.ipv4.conf.default.secure_redirects",
+            f"Unexpected error: {exc}",
+            "sysctl_baseline",
+        )
+
+
+def _check_ptrace_scope() -> dict:
+    try:
+        found, val = _read_sysctl("kernel.yama.ptrace_scope")
+        if not found:
+            return skipped_check(
+                "KRN-011", "kernel",
+                "kernel.yama.ptrace_scope >= 1 (Yama PTrace protection)",
+                "Checks that Yama PTrace protection is enabled.",
+                "Without PTrace protection, any process can attach to and inspect any other process, enabling privilege escalation.",
+                "sysctl -n kernel.yama.ptrace_scope",
+                "kernel.yama.ptrace_scope not found (Yama LSM may not be enabled)",
+                "sysctl_baseline",
+            )
+
+        current = val
+        details = [f"kernel.yama.ptrace_scope = {val}"]
+
+        try:
+            v = int(val)
+        except ValueError:
+            v = -1
+
+        if v >= 1:
+            status = STATUS_PASS
+            rec = "1 (restricted) or higher"
+            manual = "sysctl -w kernel.yama.ptrace_scope=1"
+        else:
+            status = STATUS_WARNING
+            rec = "1 (restricted) or higher"
+            manual = "sysctl -w kernel.yama.ptrace_scope=1"
+
+        return make_check(
+            "KRN-011", "kernel",
+            "kernel.yama.ptrace_scope >= 1 (Yama PTrace protection)",
+            status,
+            "Yama PTrace protection restricts which processes can attach to which other processes using ptrace. "
+            "Mode 1 allows a process to only trace its descendants, preventing arbitrary process inspection.",
+            "Without PTrace protection, a compromised process can attach to any other process to read its memory, "
+            "steal credentials, or inject code, leading to privilege escalation.",
+            "sysctl -n kernel.yama.ptrace_scope",
+            current,
+            rec,
+            details,
+            "sysctl_baseline",
+            manual,
+        )
+    except Exception as exc:
+        return skipped_check(
+            "KRN-011", "kernel",
+            "kernel.yama.ptrace_scope >= 1 (Yama PTrace protection)",
+            "Checks that Yama PTrace protection is enabled.",
+            "Without PTrace protection, any process can attach to and inspect any other process, enabling privilege escalation.",
+            "sysctl -n kernel.yama.ptrace_scope",
+            f"Unexpected error: {exc}",
+            "sysctl_baseline",
+        )
+
+
+def _check_protected_hardlinks() -> dict:
+    try:
+        found, val = _read_sysctl("fs.protected_hardlinks")
+        if not found:
+            return skipped_check(
+                "KRN-012", "kernel",
+                "fs.protected_hardlinks = 1 (protected hard links)",
+                "Checks that hard links can only be created by the file owner or root.",
+                "Without protection, any user can create hard links to files owned by others, potentially reading or modifying them.",
+                "sysctl -n fs.protected_hardlinks",
+                "fs.protected_hardlinks not found",
+                "sysctl_baseline",
+            )
+
+        current = val
+        details = [f"fs.protected_hardlinks = {val}"]
+
+        if val == "1":
+            status = STATUS_PASS
+            rec = "1 (enabled)"
+            manual = "sysctl -w fs.protected_hardlinks=1"
+        else:
+            status = STATUS_WARNING
+            rec = "1 (enabled)"
+            manual = "sysctl -w fs.protected_hardlinks=1"
+
+        return make_check(
+            "KRN-012", "kernel",
+            "fs.protected_hardlinks = 1 (protected hard links)",
+            status,
+            "Protected hard links restrict the creation of hard links to files to only the file owner or root. "
+            "This prevents other users from creating hard links to sensitive files.",
+            "Without protected hard links, a user can create a hard link to a file owned by another user (e.g., /etc/shadow) and read or modify it, "
+            "leading to information disclosure or privilege escalation.",
+            "sysctl -n fs.protected_hardlinks",
+            current,
+            rec,
+            details,
+            "sysctl_baseline",
+            manual,
+        )
+    except Exception as exc:
+        return skipped_check(
+            "KRN-012", "kernel",
+            "fs.protected_hardlinks = 1 (protected hard links)",
+            "Checks that hard links can only be created by the file owner or root.",
+            "Without protection, any user can create hard links to files owned by others, potentially reading or modifying them.",
+            "sysctl -n fs.protected_hardlinks",
+            f"Unexpected error: {exc}",
+            "sysctl_baseline",
+        )
+
+
+def _check_protected_symlinks() -> dict:
+    try:
+        found, val = _read_sysctl("fs.protected_symlinks")
+        if not found:
+            return skipped_check(
+                "KRN-013", "kernel",
+                "fs.protected_symlinks = 1 (protected symbolic links)",
+                "Checks that symbolic links in sticky directories can only be followed by the directory owner or file owner.",
+                "Without protection, any user can follow symbolic links in sticky directories to access files they don't own.",
+                "sysctl -n fs.protected_symlinks",
+                "fs.protected_symlinks not found",
+                "sysctl_baseline",
+            )
+
+        current = val
+        details = [f"fs.protected_symlinks = {val}"]
+
+        if val == "1":
+            status = STATUS_PASS
+            rec = "1 (enabled)"
+            manual = "sysctl -w fs.protected_symlinks=1"
+        else:
+            status = STATUS_WARNING
+            rec = "1 (enabled)"
+            manual = "sysctl -w fs.protected_symlinks=1"
+
+        return make_check(
+            "KRN-013", "kernel",
+            "fs.protected_symlinks = 1 (protected symbolic links)",
+            status,
+            "Protected symbolic links restrict the following of symbolic links in sticky directories (like /tmp) to only the directory owner or file owner. "
+            "This prevents other users from following symlinks to access files they don't own.",
+            "Without protected symlinks, a user can create a symbolic link in /tmp pointing to a file owned by another user and follow it to read or modify that file, "
+            "leading to information disclosure or privilege escalation.",
+            "sysctl -n fs.protected_symlinks",
+            current,
+            rec,
+            details,
+            "sysctl_baseline",
+            manual,
+        )
+    except Exception as exc:
+        return skipped_check(
+            "KRN-013", "kernel",
+            "fs.protected_symlinks = 1 (protected symbolic links)",
+            "Checks that symbolic links in sticky directories can only be followed by the directory owner or file owner.",
+            "Without protection, any user can follow symbolic links in sticky directories to access files they don't own.",
+            "sysctl -n fs.protected_symlinks",
+            f"Unexpected error: {exc}",
+            "sysctl_baseline",
+        )
+
+
+def _check_unprivileged_bpf() -> dict:
+    try:
+        found, val = _read_sysctl("kernel.unprivileged_bpf_disabled")
+        if not found:
+            return skipped_check(
+                "KRN-014", "kernel",
+                "kernel.unprivileged_bpf_disabled >= 1 (unprivileged BPF disabled)",
+                "Checks that unprivileged BPF is disabled.",
+                "Without disabling unprivileged BPF, any user can create and execute BPF programs, potentially leading to privilege escalation.",
+                "sysctl -n kernel.unprivileged_bpf_disabled",
+                "kernel.unprivileged_bpf_disabled not found (kernel may not support unprivileged BPF)",
+                "sysctl_baseline",
+            )
+
+        current = val
+        details = [f"kernel.unprivileged_bpf_disabled = {val}"]
+
+        try:
+            v = int(val)
+        except ValueError:
+            v = -1
+
+        if v >= 1:
+            status = STATUS_PASS
+            rec = "1 (disabled) or higher"
+            manual = "sysctl -w kernel.unprivileged_bpf_disabled=1"
+        else:
+            status = STATUS_WARNING
+            rec = "1 (disabled) or higher"
+            manual = "sysctl -w kernel.unprivileged_bpf_disabled=1"
+
+        return make_check(
+            "KRN-014", "kernel",
+            "kernel.unprivileged_bpf_disabled >= 1 (unprivileged BPF disabled)",
+            status,
+            "Disabling unprivileged BPF prevents non-root users from creating and executing BPF programs. "
+            "This reduces the attack surface for BPF-based exploits.",
+            "If unprivileged BPF is enabled, any user can create and execute BPF programs, potentially leading to memory corruption or privilege escalation "
+            "through crafted BPF code.",
+            "sysctl -n kernel.unprivileged_bpf_disabled",
+            current,
+            rec,
+            details,
+            "sysctl_baseline",
+            manual,
+        )
+    except Exception as exc:
+        return skipped_check(
+            "KRN-014", "kernel",
+            "kernel.unprivileged_bpf_disabled >= 1 (unprivileged BPF disabled)",
+            "Checks that unprivileged BPF is disabled.",
+            "Without disabling unprivileged BPF, any user can create and execute BPF programs, potentially leading to privilege escalation.",
+            "sysctl -n kernel.unprivileged_bpf_disabled",
+            f"Unexpected error: {exc}",
+            "sysctl_baseline",
+        )
+
+
+def _check_aslr() -> dict:
+    try:
+        found, val = _read_sysctl("kernel.randomize_va_space")
+        if not found:
+            return skipped_check(
+                "KRN-015", "kernel",
+                "kernel.randomize_va_space = 2 (ASLR enabled)",
+                "Checks that Address Space Layout Randomization (ASLR) is enabled.",
+                "Without ASLR, memory addresses are predictable, making it easier for attackers to craft reliable exploits.",
+                "sysctl -n kernel.randomize_va_space",
+                "kernel.randomize_va_space not found",
+                "sysctl_baseline",
+            )
+
+        current = val
+        details = [f"kernel.randomize_va_space = {val}"]
+
+        if val == "2":
+            status = STATUS_PASS
+            rec = "2 (full randomization)"
+            manual = "sysctl -w kernel.randomize_va_space=2"
+        elif val == "1":
+            status = STATUS_WARNING
+            rec = "2 (full randomization)"
+            manual = "sysctl -w kernel.randomize_va_space=2"
+        else:
+            status = STATUS_CRITICAL
+            rec = "2 (full randomization)"
+            manual = "sysctl -w kernel.randomize_va_space=2"
+
+        return make_check(
+            "KRN-015", "kernel",
+            "kernel.randomize_va_space = 2 (ASLR enabled)",
+            status,
+            "Address Space Layout Randomization (ASLR) randomizes the memory locations of key data areas such as the heap, stack, and libraries. "
+            "Mode 2 provides full randomization for all processes.",
+            "Without ASLR, memory addresses are predictable, making it much easier for attackers to craft reliable exploits for buffer overflows, "
+            "format string vulnerabilities, and other memory corruption attacks.",
+            "sysctl -n kernel.randomize_va_space",
+            current,
+            rec,
+            details,
+            "sysctl_baseline",
+            manual,
+        )
+    except Exception as exc:
+        return skipped_check(
+            "KRN-015", "kernel",
+            "kernel.randomize_va_space = 2 (ASLR enabled)",
+            "Checks that Address Space Layout Randomization (ASLR) is enabled.",
+            "Without ASLR, memory addresses are predictable, making it easier for attackers to craft reliable exploits.",
+            "sysctl -n kernel.randomize_va_space",
             f"Unexpected error: {exc}",
             "sysctl_baseline",
         )
@@ -533,4 +990,12 @@ def run_checks() -> list[dict]:
         _check_source_route(),
         _check_dmesg_restrict(),
         _check_kptr_restrict(),
+        _check_bpf_jit_harden(),
+        _check_tcp_rfc1337(),
+        _check_secure_redirects(),
+        _check_ptrace_scope(),
+        _check_protected_hardlinks(),
+        _check_protected_symlinks(),
+        _check_unprivileged_bpf(),
+        _check_aslr(),
     ]
