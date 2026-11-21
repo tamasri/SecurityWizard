@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecurityWizard Security Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+    <script>
+function securityWizardApp() {
+  return {
+    tab: 'all',
+    tabs: [
+      { id: 'all', label: 'All Checks' },
+      { id: 'network', label: 'Network & Firewall' },
+      { id: 'ssh', label: 'SSH & Auth' },
+      { id: 'kernel', label: 'Kernel (sysctl)' },
+      { id: 'privilege', label: 'Privilege & Filesystem' },
+      { id: 'docker', label: 'Docker Security' },
+      { id: 'logs', label: 'Logs & Monitoring' },
+      { id: 'backups', label: 'Backup & Rollback Center' }
+    ],
+    scanning: false,
+    progress: { done: 0, total: 6, current: '' },
+    result: null,
+    severity: 'ALL',
+    expanded: {},
+    modal: {
+      open: false,
+      mode: 'preview',
+      loading: false,
+      check: null,
+      preview: null,
+      result: null,
+      error: null,
+      confirmText: ''
+    },
+    backups: [],
+    toast: { show: false, msg: '', kind: 'info' },
+    error: '',
+    _pollTimer: null,
+    _toastTimer: null,
+
+    init() {
+      this.loadBackups();
+    },
+
+    async api(method, url, body = null) {
+      const opts = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'SecurityWizard'
+        }
+      };
+      if (body !== null) {
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      if (!res.ok) {
+        let msg = res.statusText;
+        try {
+          const j = await res.json();
+          if (j && j.detail) msg = j.detail;
+          else if (j && j.message) msg = j.message;
+        } catch (_) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+
+    async runScan() {
+      this.scanning = true;
+      this.result = null;
+      this.progress = { done: 0, total: 6, current: 'Starting…' };
+      this.error = '';
+      try {
+        const r = await this.api('POST', '/api/scan', this.tab === 'all' ? {} : { category: this.tab });
+        this.pollScan(r.job_id);
+      } catch (e) {
+        this.scanning = false;
+        this.error = e.message;
+      }
+    },
+
+    pollScan(jobId) {
+      this._pollTimer = setInterval(async () => {
+        try {
+          const j = await this.api('GET', `/api/scan/${jobId}`);
+          this.progress = j.progress;
+          if (j.status === 'done') {
+            this.result = j.result;
+            this.scanning = false;
+            clearInterval(this._pollTimer);
+            this._pollTimer = null;
+          } else if (j.status === 'error') {
+            this.error = j.error || 'Scan failed';
+            this.scanning = false;
+            clearInterval(this._pollTimer);
+            this._pollTimer = null;
+          }
+        } catch (e) {
+          this.error = e.message;
+          this.scanning = false;
+          clearInterval(this._pollTimer);
+          this._pollTimer = null;
+        }
+      }, 800);
+    },
+
+    filteredChecks() {
+      if (!this.result || !this.result.checks) return [];
+      if (this.tab === 'backups') return [];
+      return this.result.checks.filter(c => {
+        const matchTab = this.tab === 'all' || c.category === this.tab;
+        if (!matchTab) return false;
+        if (this.severity === 'ALL') return true;
+        if (this.severity === 'PASS' || this.severity === 'WARNING' || this.severity === 'CRITICAL') {
+          return c.status === this.severity;
+        }
+        return false;
+      });
+    },
+
+    toggleDetails(id) {
+      this.expanded[id] = !this.expanded[id];
+    },
+
+    async previewFix(check) {
+      this.modal = {
+        open: true,
+        mode: 'preview',
+        loading: true,
+        check,
+        preview: null,
+        result: null,
+        error: null,
+        confirmText: ''
+      };
+      try {
+        const p = await this.api('POST', '/api/dry-run', { remediation_id: check.remediation_id });
+        this.modal.preview = p;
+      } catch (e) {
+        this.modal.error = e.message;
+      } finally {
+        this.modal.loading = false;
+      }
+    },
+
+    async applyFix() {
+      if (this.modal.confirmText.trim().toLowerCase() !== 'yes') return;
+      if (!this.modal.preview || this.modal.preview.blocked) return;
+      const id = this.modal.check.remediation_id;
+      this.modal.loading = true;
+      this.modal.error = null;
+      try {
+        const r = await this.api('POST', '/api/remediate', { remediation_id: id, confirm: true });
+        this.modal.result = r;
+        this.toast = { show: true, msg: r.ok ? 'Remediation applied.' : r.message, kind: r.ok ? 'success' : 'error' };
+        this._showToast();
+        this.loadBackups();
+        this.closeModal();
+        this.runScan();
+      } catch (e) {
+        this.modal.error = e.message;
+      } finally {
+        this.modal.loading = false;
+      }
+    },
+
+    async copyCommand(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        this.toast = { show: true, msg: 'Copied to clipboard', kind: 'info' };
+        this._showToast();
+      } catch (_) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        this.toast = { show: true, msg: 'Copied to clipboard', kind: 'info' };
+        this._showToast();
+      }
+    },
+
+    async loadBackups() {
+      try {
+        const r = await this.api('GET', '/api/backups');
+        this.backups = r.backups;
+      } catch (e) {
+        this.backups = [];
+      }
+    },
+
+    async restoreSnapshot(id) {
+      if (!window.confirm('Roll back this snapshot?')) return;
+      try {
+        const r = await this.api('POST', '/api/rollback', { snapshot_id: id });
+        this.toast = { show: true, msg: r.ok ? 'Snapshot restored.' : r.message, kind: r.ok ? 'success' : 'error' };
+        this._showToast();
+        this.loadBackups();
+      } catch (e) {
+        this.toast = { show: true, msg: e.message, kind: 'error' };
+        this._showToast();
+      }
+    },
+
+    closeModal() {
+      this.modal.open = false;
+      this.modal.check = null;
+      this.modal.preview = null;
+      this.modal.result = null;
+      this.modal.error = null;
+      this.modal.confirmText = '';
+    },
+
+    _showToast() {
+      if (this._toastTimer) clearTimeout(this._toastTimer);
+      this.toast.show = true;
+      this._toastTimer = setTimeout(() => {
+        this.toast.show = false;
+      }, 3500);
+    },
+
+    statusClass(status) {
+      switch (status) {
+        case 'PASS': return 'bg-green-100 text-green-800 border border-green-300';
+        case 'WARNING': return 'bg-yellow-100 text-yellow-800 border border-yellow-300';
+        case 'CRITICAL': return 'bg-red-100 text-red-800 border border-red-300';
+        case 'INFO': return 'bg-blue-100 text-blue-800 border border-blue-300';
+        case 'SKIPPED': return 'bg-gray-100 text-gray-600 border border-gray-300';
+        default: return 'bg-gray-100 text-gray-600 border border-gray-300';
+      }
+    },
+
+    scoreColor() {
+      const s = this.scorePercent();
+      if (s >= 80) return 'text-green-600';
+      if (s >= 50) return 'text-yellow-600';
+      return 'text-red-600';
+    },
+
+    scorePercent() {
+      return this.result ? this.result.score : 0;
+    },
+
+    counts() {
+      if (!this.result || !this.result.counts) return { PASS: 0, WARNING: 0, CRITICAL: 0 };
+      return {
+        PASS: this.result.counts.PASS || 0,
+        WARNING: this.result.counts.WARNING || 0,
+        CRITICAL: this.result.counts.CRITICAL || 0
+      };
+    }
+  };
+}
+
+</script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+</head>
+<body x-data="securityWizardApp()" x-init="init()" class="bg-gray-900 text-gray-100 min-h-screen font-sans">
+
+    <!-- Error Banner -->
+    <div x-show="error" x-cloak class="bg-red-600 text-white p-3 text-center text-sm font-medium">
+        <span x-text="error"></span>
+    </div>
+
+    <!-- Top Executive Summary Bar -->
+    <header class="bg-gray-800 border-b border-gray-700 p-4 shadow-md flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+            <div class="w-20 h-20 rounded-full flex items-center justify-center" 
+                 :style="{ background: `conic-gradient(${scoreColor()} ${scorePercent()}%, #374151 ${scorePercent()}%)` }">
+                <div class="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center text-xl font-bold" x-text="scorePercent()"></div>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold">SecurityWizard</h1>
+                <p class="text-sm text-gray-400">Overall Security Score: <span x-text="scorePercent()"></span>%</p>
+            </div>
+        </div>
+        
+        <div class="flex gap-4 text-center">
+            <div class="bg-gray-700 rounded p-2">
+                <div class="text-lg font-bold text-green-400" x-text="counts().PASS"></div>
+                <div class="text-xs text-gray-300">Passed</div>
+            </div>
+            <div class="bg-gray-700 rounded p-2">
+                <div class="text-lg font-bold text-yellow-400" x-text="counts().WARNING"></div>
+                <div class="text-xs text-gray-300">Warnings</div>
+            </div>
+            <div class="bg-gray-700 rounded p-2">
+                <div class="text-lg font-bold text-red-400" x-text="counts().CRITICAL"></div>
+                <div class="text-xs text-gray-300">Critical</div>
+            </div>
+        </div>
+
+        <div class="flex flex-col items-center w-full md:w-auto">
+            <button @click="runScan()" :disabled="scanning" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow disabled:opacity-50 disabled:cursor-not-allowed">
+                <span x-text="scanning ? 'Scanning...' : 'Run Full System Audit'"></span>
+            </button>
+            <div x-show="scanning" x-cloak class="w-48 mt-2">
+                <div class="bg-gray-700 rounded-full h-2">
+                    <div class="bg-blue-500 h-2 rounded-full transition-all duration-300" :style="{ width: (progress.total > 0 ? (progress.done / progress.total * 100) : 0) + '%' }"></div>
+                </div>
+                <p class="text-xs text-gray-400 mt-1" x-text="progress.current"></p>
+            </div>
+        </div>
+    </header>
+
+    <main class="p-4 max-w-7xl mx-auto">
+        
+        <!-- Category Tabs & Severity Filter -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <div class="flex flex-wrap gap-2">
+                <template x-for="t in tabs" :key="t.id">
+                    <button @click="tab = t.id" class="px-3 py-1 rounded text-sm transition-colors"
+                            :class="tab === t.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'"
+                            x-text="t.label"></button>
+                </template>
+            </div>
+            <div class="flex gap-2">
+                <button @click="severity = 'ALL'" class="px-2 py-1 rounded text-xs" :class="severity === 'ALL' ? 'bg-gray-600 text-white' : 'bg-gray-800 text-gray-400'">All</button>
+                <button @click="severity = 'CRITICAL'" class="px-2 py-1 rounded text-xs" :class="severity === 'CRITICAL' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400'">Critical</button>
+                <button @click="severity = 'WARNING'" class="px-2 py-1 rounded text-xs" :class="severity === 'WARNING' ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-400'">Warning</button>
+                <button @click="severity = 'PASS'" class="px-2 py-1 rounded text-xs" :class="severity === 'PASS' ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400'">Pass</button>
+            </div>
+        </div>
+
+        <!-- Check Cards (when not on backups tab) -->
+        <div x-show="tab !== 'backups'" x-cloak>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <template x-for="check in filteredChecks()" :key="check.id">
+                    <div class="bg-gray-800 border border-gray-700 rounded-lg p-4 shadow hover:border-gray-600 transition-colors">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xs text-gray-500 font-mono" x-text="check.id"></span>
+                            <span class="px-2 py-1 rounded text-xs font-bold" :class="statusClass(check.status)" x-text="check.status"></span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-2" x-text="check.title"></h3>
+                        
+                        <div class="text-sm text-gray-300 mb-4">
+                            <div>Current: <span class="font-mono text-xs" x-text="check.current_value"></span></div>
+                            <div>Recommended: <span class="font-mono text-xs" x-text="check.recommended_value"></span></div>
+                        </div>
+
+                        <!-- Learn More Drawer -->
+                        <button @click="toggleDetails(check.id)" class="text-blue-400 text-sm hover:underline mb-2">
+                            <span x-text="expanded[check.id] ? 'Hide Details' : 'Learn More & Risk Details'"></span>
+                        </button>
+                        
+                        <div x-show="expanded[check.id]" x-cloak class="bg-gray-900 rounded p-3 mb-4 text-sm space-y-2">
+                            <div><span class="font-bold text-gray-400">What it checks:</span> <span x-text="check.what_it_checks"></span></div>
+                            <div><span class="font-bold text-gray-400">Security Risk:</span> <span x-text="check.risk"></span></div>
+                            <div><span class="font-bold text-gray-400">Under-the-Hood Command:</span> <code class="bg-gray-800 px-1 rounded text-xs" x-text="check.command"></code></div>
+                            <div x-show="check.details && check.details.length > 0">
+                                <span class="font-bold text-gray-400">Details:</span>
+                                <ul class="list-disc list-inside text-xs text-gray-400">
+                                    <template x-for="d in check.details" :key="d">
+                                        <li x-text="d"></li>
+                                    </template>
+                                </ul>
+                            </div>
+                            <div><span class="font-bold text-gray-400">Remediation Action:</span> <span x-text="check.remediation_id ? 'One-click fix available' : 'No automatic fix'"></span></div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex flex-wrap gap-2">
+                            <button @click="copyCommand(check.manual_command || check.command)" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-1 rounded">Copy Manual Command</button>
+                            <template x-if="check.remediation_id">
+                                <div class="flex gap-2">
+                                    <button @click="previewFix(check)" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded">Preview Fix</button>
+                                    <button @click="previewFix(check)" class="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1 rounded">Apply Hardening</button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Backup & Rollback Center -->
+        <div x-show="tab === 'backups'" x-cloak>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">Backup & Rollback Center</h2>
+                <button @click="loadBackups()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">Refresh</button>
+            </div>
+            <div class="space-y-3">
+                <template x-for="b in backups" :key="b.snapshot_id">
+                    <div class="bg-gray-800 border border-gray-700 rounded p-4 flex justify-between items-center">
+                        <div>
+                            <div class="font-mono text-sm text-gray-400" x-text="b.snapshot_id"></div>
+                            <div class="text-sm" x-text="b.created"></div>
+                            <div class="text-sm text-gray-400">Remediation: <span x-text="b.remediation_id"></span></div>
+                            <div class="text-xs text-gray-500">Files: <span x-text="b.files.join(', ')"></span></div>
+                        </div>
+                        <button @click="restoreSnapshot(b.snapshot_id)" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm">Restore Snapshot</button>
+                    </div>
+                </template>
+                <div x-show="backups.length === 0" class="text-gray-500 text-center py-4">No backups yet.</div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modal -->
+    <div x-show="modal.open" x-cloak class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 border border-gray-700 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold" x-text="modal.mode === 'preview' ? 'Preview Fix' : modal.mode === 'apply-result' ? 'Apply Result' : 'Rollback Confirm'"></h3>
+                <button @click="closeModal()" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+
+            <!-- Preview Mode -->
+            <div x-show="modal.mode === 'preview'" x-cloak>
+                <div x-show="modal.preview && modal.preview.warnings && modal.preview.warnings.length > 0" class="mb-4">
+                    <div class="font-bold text-yellow-400 mb-1">Warnings:</div>
+                    <ul class="list-disc list-inside text-sm text-yellow-300">
+                        <template x-for="w in modal.preview.warnings" :key="w">
+                            <li x-text="w"></li>
+                        </template>
+                    </ul>
+                </div>
+                <div x-show="modal.preview && modal.preview.blocked" class="mb-4 bg-red-900 bg-opacity-50 p-2 rounded text-red-300 text-sm">
+                    Blocked: <span x-text="modal.preview.blocked_reason"></span>
+                </div>
+                <div class="mb-4">
+                    <div class="font-bold text-gray-400 mb-1">Commands:</div>
+                    <div class="bg-gray-900 p-2 rounded font-mono text-xs space-y-1">
+                        <template x-for="cmd in (modal.preview && modal.preview.commands) || []" :key="cmd">
+                            <div x-text="cmd"></div>
+                        </template>
+                    </div>
+                </div>
+                <div x-show="modal.preview && modal.preview.diffs && modal.preview.diffs.length > 0" class="mb-4">
+                    <div class="font-bold text-gray-400 mb-1">File Diffs:</div>
+                    <template x-for="diff in modal.preview.diffs" :key="diff.path">
+                        <div class="bg-gray-900 p-2 rounded mb-2">
+                            <div class="text-xs text-gray-500" x-text="diff.path"></div>
+                            <pre class="text-xs overflow-x-auto whitespace-pre-wrap" x-text="diff.unified_diff"></pre>
+                        </div>
+                    </template>
+                </div>
+                <div x-show="modal.preview && modal.preview.perm_changes && modal.preview.perm_changes.length > 0" class="mb-4">
+                    <div class="font-bold text-gray-400 mb-1">Permission Changes:</div>
+                    <template x-for="pc in modal.preview.perm_changes" :key="pc.path">
+                        <div class="text-sm" x-text="`${pc.path}: ${pc.current_mode} -> ${pc.new_mode}`"></div>
+                    </template>
+                </div>
+                <div class="mt-4 flex items-center gap-2">
+                    <input type="text" x-model="modal.confirmText" placeholder="Type 'yes' to confirm" class="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm w-40">
+                    <button @click="applyFix()" :disabled="modal.loading || (modal.preview && modal.preview.blocked) || modal.confirmText !== 'yes'" 
+                            class="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded text-sm">
+                        Apply Hardening
+                    </button>
+                </div>
+            </div>
+
+            <!-- Apply Result Mode -->
+            <div x-show="modal.mode === 'apply-result'" x-cloak>
+                <div class="mb-4" :class="modal.result && modal.result.ok ? 'bg-green-900 bg-opacity-50 p-2 rounded text-green-300' : 'bg-red-900 bg-opacity-50 p-2 rounded text-red-300'" x-text="modal.result && modal.result.message"></div>
+                <div x-show="modal.result && modal.result.output && modal.result.output.length > 0" class="bg-gray-900 p-2 rounded font-mono text-xs space-y-1">
+                    <template x-for="line in modal.result.output" :key="line">
+                        <div x-text="line"></div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Rollback Confirm Mode -->
+            <div x-show="modal.mode === 'rollback'" x-cloak>
+                <p class="text-sm mb-4">Are you sure you want to roll back this snapshot? This will restore the previous configuration.</p>
+                <div class="flex gap-2">
+                    <button @click="restoreSnapshot(modal.check && modal.check.snapshot_id); closeModal();" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm">Confirm Rollback</button>
+                    <button @click="closeModal()" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div x-show="toast.show" x-cloak class="fixed bottom-4 right-4 bg-gray-800 border border-gray-700 rounded px-4 py-3 shadow-lg z-50" :class="toast.kind === 'success' ? 'border-green-500' : 'border-red-500'">
+        <span x-text="toast.msg"></span>
+    </div>
+
+</body>
+</html>
