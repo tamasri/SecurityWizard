@@ -67,14 +67,16 @@ def test_api_status_not_dry_run_only(monkeypatch):
     assert data["dry_run_only"] is False
 
 
-def test_html_contains_explanatory_strings():
-    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "templates", "index.html")
-    with open(html_path, "r", encoding="utf-8") as f:
-        html = f.read()
-    assert "No automatic fix available" in html
-    assert "Apply is disabled: server runs in dry-run-only mode" in html
-    assert "Preview Fix" in html
-    assert "Apply Hardening" in html
+def test_ui_explains_why_fix_buttons_are_missing_or_disabled():
+    """The explanations live in the dashboard script (English and Arabic dictionaries)."""
+    js_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static", "app.js")
+    with open(js_path, "r", encoding="utf-8") as f:
+        js = f.read()
+    assert "No automatic fix" in js
+    assert "Apply is disabled: the server runs in dry-run-only mode" in js
+    assert "Apply is disabled: the server runs in read-only mode" in js
+    assert "Preview fix" in js
+    assert "'fix.dryRunOnly'" in js and "'fix.readOnly'" in js and "'noFix'" in js
 
 
 def test_scan_result_fix_state_no_remediation_old_code_fails(monkeypatch):
