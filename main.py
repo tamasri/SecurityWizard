@@ -16,6 +16,7 @@ import remediator
 import auth
 import history
 import export
+import security
 
 app = FastAPI(title="SecurityWizard", version="1.0.0")
 
@@ -63,6 +64,10 @@ async def security_middleware(request: Request, call_next):
         xrw = request.headers.get("x-requested-with", "")
         if xrw != "SecurityWizard":
             return JSONResponse(status_code=403, content={"detail": "Forbidden Origin"})
+        
+        # Check Origin/Referer for state-changing requests
+        if not security.check_origin_allowed(request):
+            return JSONResponse(status_code=403, content={"detail": "Origin not allowed"})
     
     # Auth check for /api/* and /
     if auth.is_auth_enabled():
@@ -86,7 +91,18 @@ async def security_middleware(request: Request, call_next):
             
             return JSONResponse(status_code=401, content={"detail": "Authentication required"})
     
-    return await call_next(request)
+    response = await call_next(request)
+    
+    # Add security headers to every response
+    for header, value in security.get_security_headers().items():
+        response.headers[header] = value
+    
+    # Add cache headers for API responses
+    if request.url.path.startswith("/api/"):
+        for header, value in security.get_cache_headers().items():
+            response.headers[header] = value
+    
+    return response
 
 # --- Routes ---
 @app.get("/")
@@ -96,14 +112,22 @@ async def index():
 
 @app.post("/api/login")
 async def login(request: Request):
+    # Rate limit login attempts
+    client_ip = request.client.host if request.client else "unknown"
+    if not security.check_rate_limit("login", client_ip):
+        security.audit_log("login", client_ip, result="rate_limited")
+        return JSONResponse(status_code=429, content={"detail": "Too many login attempts"})
+    
     body = await request.json()
     password = body.get("password", "")
     if auth.get_auth_mode() == "password":
         if auth.verify_password(password, auth.get_password_hash()):
             token = auth._create_session_token("user")
+            security.audit_log("login", client_ip, result="success")
             response = JSONResponse(content={"token": token})
             response.set_cookie("sw_session", token, httponly=True, samesite="strict", secure=False)
             return response
+        security.audit_log("login", client_ip, result="failed")
         return JSONResponse(status_code=401, content={"detail": "Invalid password"})
     elif auth.get_auth_mode() == "token":
         auth_header = request.headers.get("authorization", "")
@@ -111,10 +135,13 @@ async def login(request: Request):
             token = auth_header[7:]
             if token == auth.get_generated_token():
                 session_token = auth._create_session_token("token-user")
+                security.audit_log("login", client_ip, result="success")
                 response = JSONResponse(content={"token": session_token})
                 response.set_cookie("sw_session", session_token, httponly=True, samesite="strict", secure=False)
                 return response
+        security.audit_log("login", client_ip, result="failed")
         return JSONResponse(status_code=401, content={"detail": "Invalid token"})
+    security.audit_log("login", client_ip, result="error")
     return JSONResponse(status_code=400, content={"detail": "Auth not configured"})
 
 @app.post("/api/logout")
@@ -131,7 +158,8 @@ async def health():
 async def get_status():
     from common import is_root
     dry_run_only = os.environ.get("SECURITYWIZARD_DRY_RUN_ONLY", "0") == "1"
-    return {"dry_run_only": dry_run_only, "is_root": is_root()}
+    readonly = security.is_readonly()
+    return {"dry_run_only": dry_run_only, "is_root": is_root(), "readonly": readonly}
 
 @app.post("/api/scan")
 async def start_scan(req: ScanRequest):
@@ -219,12 +247,33 @@ async def get_scan_global_status():
 
 @app.post("/api/dry-run")
 async def dry_run(req: DryRunRequest):
+    # Validate remediation ID
+    if not security.validate_remediation_id(req.remediation_id):
+        raise HTTPException(status_code=422, detail="Invalid remediation_id format")
+    
+    client_ip = req.client.host if req.client else "unknown"
     result = await run_in_threadpool(remediator.preview, req.remediation_id)
+    security.audit_log("dry-run", client_ip, remediation_id=req.remediation_id, result="success")
     return result
 
 @app.post("/api/remediate")
 async def remediate(req: RemediateRequest):
+    # Check read-only mode
+    if security.is_readonly():
+        return JSONResponse(status_code=403, content={"detail": "Read-only mode: apply disabled"})
+    
+    # Validate remediation ID
+    if not security.validate_remediation_id(req.remediation_id):
+        raise HTTPException(status_code=422, detail="Invalid remediation_id format")
+    
+    # Rate limit apply operations
+    client_ip = req.client.host if req.client else "unknown"
+    if not security.check_rate_limit("apply", client_ip):
+        security.audit_log("apply", client_ip, remediation_id=req.remediation_id, result="rate_limited")
+        return JSONResponse(status_code=429, content={"detail": "Too many apply operations"})
+    
     result = await run_in_threadpool(remediator.apply, req.remediation_id, req.confirm)
+    security.audit_log("apply", client_ip, remediation_id=req.remediation_id, result="success")
     return result
 
 @app.get("/api/backups")
@@ -234,7 +283,22 @@ async def get_backups():
 
 @app.post("/api/rollback")
 async def rollback(req: RollbackRequest):
+    # Check read-only mode
+    if security.is_readonly():
+        return JSONResponse(status_code=403, content={"detail": "Read-only mode: rollback disabled"})
+    
+    # Validate snapshot ID
+    if not security.validate_snapshot_id(req.snapshot_id):
+        raise HTTPException(status_code=422, detail="Invalid snapshot_id format")
+    
+    # Rate limit rollback operations
+    client_ip = req.client.host if req.client else "unknown"
+    if not security.check_rate_limit("rollback", client_ip):
+        security.audit_log("rollback", client_ip, result="rate_limited")
+        return JSONResponse(status_code=429, content={"detail": "Too many rollback operations"})
+    
     result = await run_in_threadpool(remediator.rollback, req.snapshot_id)
+    security.audit_log("rollback", client_ip, result="success")
     return result
 
 @app.get("/api/history")
@@ -294,6 +358,7 @@ async def get_export(fmt: str, scan_id: Optional[str] = None):
 if __name__ == "__main__":
     bind = os.environ.get("SECURITYWIZARD_BIND", "127.0.0.1")
     auth.init(bind)
+    security.init()
     if auth.is_auth_enabled() and auth.get_generated_token():
         print(f"SecurityWizard auth token: {auth.get_generated_token()}")
     uvicorn.run(app, host=bind, port=int(os.environ.get("SECURITYWIZARD_PORT", "8443")))
