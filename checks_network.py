@@ -272,96 +272,41 @@ def check_net_002():
 
 
 def check_net_003():
-    """NET-003: UFW firewall status and default policies."""
-    cmd = ["ufw", "status", "verbose"]
-    rc, out, err = run_cmd(cmd)
+    """NET-003: Firewall backend detection and INPUT chain policy evaluation."""
+    from firewall import detect_firewall, evaluate_firewall
 
-    if rc == 127:
-        return skipped_check(
-            "NET-003", "network",
-            "UFW firewall status and default policies",
-            "Checks whether the Uncomplicated Firewall (UFW) is installed, "
-            "active, and whether its default incoming policy is set to deny. "
-            "UFW is the standard firewall front-end on Ubuntu/Debian systems.",
-            "Without an active firewall with a default-deny incoming policy, "
-            "every port that a local service opens is reachable from the network. "
-            "An attacker can probe all 65535 ports and find any forgotten service.",
-            "ufw status verbose",
-            "UFW not installed; install it with: apt install ufw",
-            remediation_id="ufw_baseline",
-        )
+    info = detect_firewall()
+    eval_result = evaluate_firewall(info)
 
-    if rc != 0:
-        return skipped_check(
-            "NET-003", "network",
-            "UFW firewall status and default policies",
-            "Checks whether the Uncomplicated Firewall (UFW) is installed, "
-            "active, and whether its default incoming policy is set to deny. "
-            "UFW is the standard firewall front-end on Ubuntu/Debian systems.",
-            "Without an active firewall with a default-deny incoming policy, "
-            "every port that a local service opens is reachable from the network. "
-            "An attacker can probe all 65535 ports and find any forgotten service.",
-            "ufw status verbose",
-            f"ufw returned error: {err.strip()}",
-            remediation_id="ufw_baseline",
-        )
+    status = eval_result["status"]
+    current_value = eval_result["current_value"]
+    recommended = eval_result["recommended"]
+    details = eval_result["details"]
 
-    # Parse ufw status verbose output
-    lines = out.splitlines()
-    status_line = ""
-    default_incoming = ""
-    default_outgoing = ""
-    enabled = False
-
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("Status:"):
-            status_line = stripped
-            enabled = "active" in stripped.lower()
-        elif "Default:" in stripped:
-            # e.g. "Default: deny (incoming), allow (outgoing), disabled (routed)"
-            if "incoming" in stripped:
-                parts = stripped.split(",")
-                for part in parts:
-                    if "incoming" in part:
-                        default_incoming = part.strip().split(":", 1)[-1].strip()
-                    if "outgoing" in part:
-                        default_outgoing = part.strip().split(":", 1)[-1].strip()
-
-    if not enabled:
-        status = STATUS_CRITICAL
-        current_value = "UFW is inactive"
-        recommended = "Enable UFW with default deny incoming and allow outgoing."
+    # Determine manual command based on backend
+    if info.backend == "ufw":
         manual_cmd = "ufw default deny incoming && ufw default allow outgoing && ufw enable"
+    elif info.backend.startswith("iptables"):
+        manual_cmd = "iptables -P INPUT DROP && iptables -A INPUT -j REJECT --reject-with icmp-host-prohibited"
+    elif info.backend == "nftables":
+        manual_cmd = "nft add rule inet filter input ct state established,related accept && nft add rule inet filter input tcp dport 22 accept"
+    elif info.backend == "firewalld":
+        manual_cmd = "firewall-cmd --set-default-zone=drop && firewall-cmd --add-port=22/tcp --permanent"
     else:
-        if default_incoming and "deny" in default_incoming.lower():
-            status = STATUS_PASS
-            current_value = f"UFW active, default incoming: {default_incoming}"
-            recommended = "Default deny incoming is correct."
-            manual_cmd = ""
-        else:
-            status = STATUS_WARNING
-            current_value = f"UFW active, default incoming: {default_incoming or 'unknown'}"
-            recommended = "Set default incoming policy to deny."
-            manual_cmd = "ufw default deny incoming"
-
-    details = [f"Status: {status_line}"]
-    if default_incoming:
-        details.append(f"Default incoming: {default_incoming}")
-    if default_outgoing:
-        details.append(f"Default outgoing: {default_outgoing}")
+        manual_cmd = "apt install ufw && ufw default deny incoming && ufw default allow outgoing && ufw enable"
 
     return make_check(
         "NET-003", "network",
-        "UFW firewall status and default policies",
+        "Firewall backend detection and INPUT chain policy",
         status,
-        "Checks whether the Uncomplicated Firewall (UFW) is installed, "
-        "active, and whether its default incoming policy is set to deny. "
-        "UFW is the standard firewall front-end on Ubuntu/Debian systems.",
+        "Detects the active firewall backend (nftables, iptables, UFW, or firewalld) "
+        "and evaluates the INPUT chain default policy and final rule. "
+        "A firewall is considered secure if the default policy is DROP or if there "
+        "is a final REJECT/DROP rule.",
         "Without an active firewall with a default-deny incoming policy, "
         "every port that a local service opens is reachable from the network. "
         "An attacker can probe all 65535 ports and find any forgotten service.",
-        "ufw status verbose",
+        "firewall.py detect_firewall()",
         current_value,
         recommended,
         details=details,
