@@ -9,7 +9,7 @@ from typing import List, Optional
 logger = logging.getLogger("securitywizard")
 
 
-STATUS_PASS = "PASS"
+STATUS_PASS = "PASS"  # nosec B105
 STATUS_WARNING = "WARNING"
 STATUS_CRITICAL = "CRITICAL"
 STATUS_INFO = "INFO"
@@ -92,7 +92,7 @@ def read_text(path: str, default: str = "") -> str:
 
 def is_root() -> bool:
     try:
-        return os.geteuid() == 0
+        return os.geteuid() == 0  # type: ignore[attr-defined]
     except Exception as exc:
         logger.warning("Failed to check euid: %s", exc)
         return False

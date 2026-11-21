@@ -151,7 +151,11 @@ def recover_pending(
             _remove_persisted(token, backup_dir)
             continue
         revert_cb = revert_factory(token)
-        timer = factory(deadline - now, lambda t=token: _revert(t, revert_cb, backup_dir))
+
+        def expire(t: str = token, cb: Callable[[], None] = revert_cb) -> None:
+            _revert(t, cb, backup_dir)
+
+        timer = factory(deadline - now, expire)
         with _lock:
             _timers[token] = timer
         timer.start()

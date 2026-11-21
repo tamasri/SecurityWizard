@@ -122,7 +122,7 @@ def _derive_bits(key_type: str, blob: bytes) -> str:
 
 def _parse_options(options_str: str) -> List[str]:
     """Parse SSH authorized_keys options into a list of restriction names."""
-    restrictions = []
+    restrictions: List[str] = []
     if not options_str:
         return restrictions
     # Split by commas, respecting quotes
@@ -343,7 +343,7 @@ def _check_docker_group(group_file_content: str) -> List[dict]:
     return results
 
 
-PASSWD_FILE = "/etc/passwd"
+PASSWD_FILE = "/etc/passwd"  # nosec B105
 ROOT_AUTHORIZED_KEYS = "/root/.ssh/authorized_keys"
 
 

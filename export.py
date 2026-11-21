@@ -10,7 +10,7 @@ from history import scan_counts, scan_score, scan_timestamp
 logger = logging.getLogger("securitywizard")
 
 STATUS_TO_SARIF = {
-    "PASS": "pass",
+    "PASS": "pass",  # nosec B105
     "INFO": "note",
     "WARNING": "warning",
     "CRITICAL": "error",
@@ -154,7 +154,7 @@ def to_html(result: Dict[str, Any]) -> str:
     for check in checks:
         status = check.get("status", "")
         status_class = {
-            "PASS": "pass",
+            "PASS": "pass",  # nosec B105
             "WARNING": "warning",
             "CRITICAL": "critical",
             "INFO": "info",

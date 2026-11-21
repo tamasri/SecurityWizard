@@ -129,7 +129,7 @@ def _check_tls_expiry(port: int, handshake_fn: Optional[Callable] = None) -> Opt
                 if not cert:
                     return None
                 not_after = cert.get("notAfter")
-                exp_dt = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+                exp_dt = datetime.strptime(str(not_after), "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
                 now = datetime.now(timezone.utc)
                 days = (exp_dt - now).total_seconds() / 86400
                 return {"port": port, "days_to_expiry": days, "expires_at": exp_dt.isoformat()}
@@ -386,7 +386,7 @@ def check_failed_logins() -> Dict:
             reason=reason,
         )
 
-    top_ip = max(counts, key=counts.get)
+    top_ip = max(counts, key=lambda ip: counts[ip])
     top_count = counts[top_ip]
     details = ["{}: {} failures".format(ip, cnt) for ip, cnt in sorted(counts.items(), key=lambda x: -x[1])[:10]]
 

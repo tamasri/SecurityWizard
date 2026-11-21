@@ -66,7 +66,7 @@ def effective_config(
     if res.returncode != 0:
         return {"error": res.stderr.strip() or "sshd -T failed", "config": {}}
 
-    config = {}
+    config: Dict[str, Any] = {}
     for line in res.stdout.splitlines():
         line = line.strip()
         if not line:
@@ -153,7 +153,7 @@ def evaluate_ssh_security(port: Optional[int] = None, user: Optional[str] = None
 
     # PasswordAuthentication
     passwd_auth = config.get("passwordauthentication", "yes")
-    if passwd_auth == "yes":
+    if passwd_auth == "yes":  # nosec B105
         findings.append(
             {
                 "check": "PasswordAuthentication",
@@ -216,7 +216,7 @@ def evaluate_ssh_security(port: Optional[int] = None, user: Optional[str] = None
 
     # PermitEmptyPasswords
     empty_passwd = config.get("permitemptypasswords", "no")
-    if empty_passwd == "yes":
+    if empty_passwd == "yes":  # nosec B105
         findings.append(
             {
                 "check": "PermitEmptyPasswords",

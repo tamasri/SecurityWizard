@@ -17,7 +17,7 @@ def _history_dir() -> str:
     return os.path.join(backup_dir, "history")
 
 
-def scan_score(scan: Dict[str, Any]) -> Optional[int]:
+def scan_score(scan: Dict[str, Any]) -> Optional[float]:
     """Score of a scan result: the scanner stores a number (or None when nothing was scored); older files used {"total": n}."""
     value = scan.get("score")
     if isinstance(value, dict):

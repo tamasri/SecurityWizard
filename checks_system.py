@@ -320,7 +320,7 @@ def _check_noexec_tmp(runner=None, env=None) -> dict:
             mounts[mount_point] = options
 
     issues = []
-    for mp in ["/tmp", "/var/tmp", "/dev/shm"]:
+    for mp in ["/tmp", "/var/tmp", "/dev/shm"]:  # nosec B108
         opts = mounts.get(mp, "")
         if "noexec" not in opts:
             issues.append("{} missing noexec".format(mp))
@@ -354,7 +354,7 @@ def _check_noexec_tmp(runner=None, env=None) -> dict:
         what_it_checks="Mount options for /tmp, /var/tmp, /dev/shm.",
         risk="Temporary directories are properly restricted.",
         command="mount",
-        current_value="/tmp, /var/tmp, /dev/shm have noexec,nosuid,nodev",
+        current_value="/tmp, /var/tmp, /dev/shm have noexec,nosuid,nodev",  # nosec B108
         recommended_value="Keep these mount options",
         details=["All temporary mounts have noexec,nosuid,nodev"],
     )

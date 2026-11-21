@@ -129,7 +129,7 @@ def compute_score(checks: List[dict]) -> dict:
         "counts": counts,
         "excluded": excluded,
         "formula": formula,
-        "weights": {"PASS": 1.0, "WARNING": 0.5, "CRITICAL": 0.0, "INFO": "excluded", "SKIPPED": "excluded"},
+        "weights": {"PASS": 1.0, "WARNING": 0.5, "CRITICAL": 0.0, "INFO": "excluded", "SKIPPED": "excluded"},  # nosec B105
     }
     if not_scanned:
         result["not_scanned"] = True

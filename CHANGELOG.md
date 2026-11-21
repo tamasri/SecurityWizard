@@ -30,6 +30,20 @@ All notable changes to this project are documented here. The format follows
 - Dead-man switch: a risky change can now actually be kept (it had no confirmation endpoint).
 - `/api/scan/status` was shadowed by `/api/scan/{job_id}`; the scan endpoint blocked until the scan ended; dry-run, apply and
   rollback failed because the request model was used as the HTTP request; scans were never saved to the history.
+- **Remediation never worked from the dashboard**: the API and the remediator accepted only ids shaped like `NET-001`
+  while every registered action uses names such as `ssh_permit_root_login`, so every preview, apply and rollback was rejected.
+  Snapshot ids (rollback) and dead-man tokens had the same mismatch. All three now match what the remediator creates.
+- Actions that only run commands (the firewall baseline) were skipped as "already applied" and never ran.
+- Dead-man switch: timers no longer keep the server from shutting down, several pending changes are tracked together, and a
+  change that was never confirmed is reverted automatically when the service starts again after its deadline.
+- `ACC-001`/`ACC-003` were never evaluated on a real host (misplaced `else`), users were looked up in the wrong `/etc/passwd`
+  field, and `ACC-002` crashed on any sudoers rule.
+- `PRV-006` still rated a world-writable-only `sshd_config` as fine and treated a `PasswordAuthentication yes` setting as a secret.
+- Multi-homed host detection compared the word `via` instead of the gateway address.
+- A `docker.sock` mount was reported twice, so allowlisting the container did not silence it.
+- The NET-004 manual command inserted a blanket `DROP` at the top of `DOCKER-USER`, which would cut off every container;
+  it now only filters new connections arriving on the public interface.
+- The accepted-risk entries of the configuration file are now applied by the scanner (they were parsed but ignored).
 - `run_cmd` results can be unpacked again (`rc, out, err`); many checks silently skipped because of it.
 - `authorized_keys` parsing: options containing spaces (typical forced-command keys), RSA key size and OpenSSH style fingerprints.
 - The score is no longer shown as 0% before the first scan, SKIPPED and INFO checks are excluded, and the formula is documented.

@@ -20,12 +20,12 @@ def _find_authorized_keys():
     try:
         for home in glob.glob("/home/*"):
             key_files.append(os.path.join(home, ".ssh", "authorized_keys"))
-    except Exception:
+    except Exception:  # nosec B110
         pass
     for kf in key_files:
         try:
             content = read_text(kf, default="")
-        except Exception:
+        except Exception:  # nosec B112
             continue
         if not content:
             continue

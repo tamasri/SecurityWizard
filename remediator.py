@@ -87,7 +87,7 @@ def _file_snapshot(path, snap_dir):
     shutil.copy2(path, dest)
     if _is_root():
         try:
-            os.chown(dest, st.st_uid, st.st_gid)
+            os.chown(dest, st.st_uid, st.st_gid)  # type: ignore[attr-defined]
         except (OSError, PermissionError):
             pass
     return {
@@ -113,7 +113,7 @@ def _atomic_write(path: str, content: str, orig_stat=None) -> None:
             os.chmod(tmp, stat.S_IMODE(orig_stat.st_mode))
             if _is_root():
                 try:
-                    os.chown(tmp, orig_stat.st_uid, orig_stat.st_gid)
+                    os.chown(tmp, orig_stat.st_uid, orig_stat.st_gid)  # type: ignore[attr-defined]
                 except (OSError, PermissionError):
                     pass
         else:
@@ -170,7 +170,7 @@ def _check_idempotent(plan: dict) -> bool:
 
 
 def preview(remediation_id: str) -> dict:
-    out = {
+    out: Dict[str, Any] = {
         "remediation_id": remediation_id,
         "title": "",
         "description": "",
@@ -385,9 +385,9 @@ def list_backups():
                     }
                 )
             except (json.JSONDecodeError, OSError):
-                pass
+                logger.warning("Skipping unreadable backup manifest %s", mpath)
     except Exception:
-        pass
+        logger.exception("Could not list the backups")
     return out
 
 

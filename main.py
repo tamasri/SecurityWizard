@@ -193,7 +193,7 @@ async def login(request: Request, body: LoginRequest):
         if auth.verify_login(username or "", body.password):
             security.audit_log("login", client, result="success")
             return _session_response(
-                {"ok": True, "using_default_credentials": auth.using_default_credentials()}, username
+                {"ok": True, "using_default_credentials": auth.using_default_credentials()}, username or ""
             )
     else:
         security.audit_log("login", client, result="error")

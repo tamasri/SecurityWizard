@@ -22,7 +22,7 @@ builtins_open = builtins.open
 logger = logging.getLogger(__name__)
 
 # Severity constants (mirror common.py status strings)
-STATUS_PASS = "PASS"
+STATUS_PASS = "PASS"  # nosec B105
 STATUS_WARNING = "WARNING"
 STATUS_CRITICAL = "CRITICAL"
 STATUS_INFO = "INFO"
@@ -805,8 +805,10 @@ def _parse_rule_line(line: str, source_file: str, line_num: int, aliases: Dict[s
         # Tags are like "NOPASSWD:", "PASSWD:", "SETENV:", "NOEXEC:"
         # They appear before the first command
         tag_pattern = re.compile(r"^(NOPASSWD|PASSWD|SETENV|NOEXEC)\s*:")
-        while tag_pattern.match(rest):
+        while True:
             m = tag_pattern.match(rest)
+            if m is None:
+                break
             tags.append(m.group(1))
             rest = rest[m.end() :].strip()
         command_part = rest
