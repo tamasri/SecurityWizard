@@ -1,7 +1,11 @@
 import importlib
+import logging
 from datetime import datetime, timezone
+from typing import List, Optional
 
 from common import STATUS_PASS, STATUS_WARNING, STATUS_CRITICAL, STATUS_INFO, STATUS_SKIPPED, make_check, skipped_check
+
+logger = logging.getLogger(__name__)
 
 MODULES = [
     ("network", "checks_network"),
@@ -29,29 +33,64 @@ def _run_module(category, module_name):
         )]
 
 
-def _build_result(start_iso, checks):
-    import os
-    dry_run_only = os.environ.get("SECURITYWIZARD_DRY_RUN_ONLY", "0") == "1"
+def compute_score(checks: List[dict]) -> dict:
+    """Compute the security score from a list of check result dicts.
+    
+    Returns a dict with 'score' (int or None), 'counts', 'excluded', 'formula', 'weights'.
+    """
     counts = {STATUS_PASS: 0, STATUS_WARNING: 0, STATUS_CRITICAL: 0, STATUS_INFO: 0, STATUS_SKIPPED: 0}
     for c in checks:
         st = c.get("status", STATUS_SKIPPED)
         if st in counts:
             counts[st] += 1
+    
+    excluded = counts[STATUS_SKIPPED] + counts[STATUS_INFO]
+    denom = counts[STATUS_PASS] + counts[STATUS_WARNING] + counts[STATUS_CRITICAL]
+    
+    not_scanned = denom == 0
+    if not_scanned:
+        score = None
+        formula = "No scored checks (all SKIPPED or INFO)"
+    else:
+        score = round(100 * (counts[STATUS_PASS] + 0.5 * counts[STATUS_WARNING]) / denom)
+        formula = f"100 * ({counts[STATUS_PASS]} PASS + 0.5 * {counts[STATUS_WARNING]} WARNING) / {denom} = {score}%"
+    
+    result = {
+        "score": score,
+        "counts": counts,
+        "excluded": excluded,
+        "formula": formula,
+        "weights": {
+            "PASS": 1.0,
+            "WARNING": 0.5,
+            "CRITICAL": 0.0,
+            "INFO": "excluded",
+            "SKIPPED": "excluded"
+        }
+    }
+    if not_scanned:
+        result["not_scanned"] = True
+    return result
+
+
+def _build_result(start_iso, checks):
+    import os
+    dry_run_only = os.environ.get("SECURITYWIZARD_DRY_RUN_ONLY", "0") == "1"
+    for c in checks:
         rid = c.get("remediation_id")
         if rid:
             c["fix_state"] = "dry_run_only" if dry_run_only else "available"
         else:
             c["fix_state"] = "none"
-    denom = counts[STATUS_PASS] + counts[STATUS_WARNING] + counts[STATUS_CRITICAL]
-    if denom > 0:
-        score = round(100 * (counts[STATUS_PASS] + 0.5 * counts[STATUS_WARNING]) / denom)
-    else:
-        score = 100
+    score_info = compute_score(checks)
     return {
         "started": start_iso,
         "finished": datetime.now(timezone.utc).isoformat(),
-        "score": score,
-        "counts": counts,
+        "score": score_info["score"],
+        "counts": score_info["counts"],
+        "excluded": score_info["excluded"],
+        "formula": score_info["formula"],
+        "weights": score_info["weights"],
         "checks": checks,
     }
 

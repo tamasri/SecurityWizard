@@ -12,6 +12,7 @@
 function securityWizardApp() {
   return {
     tab: 'all',
+    showFormula: false,
     tabs: [
       { id: 'all', label: 'All Checks' },
       { id: 'network', label: 'Network & Firewall' },
@@ -253,13 +254,15 @@ function securityWizardApp() {
 
     scoreColor() {
       const s = this.scorePercent();
+      if (s === null) return 'text-gray-600';
       if (s >= 80) return 'text-green-600';
       if (s >= 50) return 'text-yellow-600';
       return 'text-red-600';
     },
 
     scorePercent() {
-      return this.result ? this.result.score : 0;
+      if (!this.result) return null;
+      return this.result.score;
     },
 
     counts() {
@@ -286,29 +289,48 @@ function securityWizardApp() {
     <!-- Top Executive Summary Bar -->
     <header class="bg-gray-800 border-b border-gray-700 p-4 shadow-md flex flex-col md:flex-row items-center justify-between gap-4">
         <div class="flex items-center gap-4">
-            <div class="w-20 h-20 rounded-full flex items-center justify-center" 
-                 :style="{ background: `conic-gradient(${scoreColor()} ${scorePercent()}%, #374151 ${scorePercent()}%)` }">
-                <div class="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center text-xl font-bold" x-text="scorePercent()"></div>
-            </div>
+            <template x-if="scorePercent() !== null">
+                <div class="w-20 h-20 rounded-full flex items-center justify-center" 
+                     :style="{ background: `conic-gradient(${scoreColor()} ${scorePercent()}%, #374151 ${scorePercent()}%)` }">
+                    <div class="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center text-xl font-bold" x-text="scorePercent()"></div>
+                </div>
+            </template>
+            <template x-if="scorePercent() === null">
+                <div class="w-20 h-20 rounded-full flex items-center justify-center bg-gray-700 text-gray-400 text-xs text-center">
+                    Not scanned yet
+                </div>
+            </template>
             <div>
                 <h1 class="text-xl font-bold">SecurityWizard</h1>
-                <p class="text-sm text-gray-400">Overall Security Score: <span x-text="scorePercent()"></span>%</p>
+                <template x-if="scorePercent() !== null">
+                    <p class="text-sm text-gray-400">Overall Security Score: <span x-text="scorePercent()"></span>%</p>
+                </template>
+                <template x-if="scorePercent() === null">
+                    <p class="text-sm text-gray-400">Run a scan to see your security score</p>
+                </template>
             </div>
         </div>
         
         <div class="flex gap-4 text-center">
-            <div class="bg-gray-700 rounded p-2">
-                <div class="text-lg font-bold text-green-400" x-text="counts().PASS"></div>
-                <div class="text-xs text-gray-300">Passed</div>
-            </div>
-            <div class="bg-gray-700 rounded p-2">
-                <div class="text-lg font-bold text-yellow-400" x-text="counts().WARNING"></div>
-                <div class="text-xs text-gray-300">Warnings</div>
-            </div>
-            <div class="bg-gray-700 rounded p-2">
-                <div class="text-lg font-bold text-red-400" x-text="counts().CRITICAL"></div>
-                <div class="text-xs text-gray-300">Critical</div>
-            </div>
+            <template x-if="scorePercent() !== null">
+                <div class="flex gap-4 text-center">
+                    <div class="bg-gray-700 rounded p-2">
+                        <div class="text-lg font-bold text-green-400" x-text="counts().PASS"></div>
+                        <div class="text-xs text-gray-300">Passed</div>
+                    </div>
+                    <div class="bg-gray-700 rounded p-2">
+                        <div class="text-lg font-bold text-yellow-400" x-text="counts().WARNING"></div>
+                        <div class="text-xs text-gray-300">Warnings</div>
+                    </div>
+                    <div class="bg-gray-700 rounded p-2">
+                        <div class="text-lg font-bold text-red-400" x-text="counts().CRITICAL"></div>
+                        <div class="text-xs text-gray-300">Critical</div>
+                    </div>
+                </div>
+            </template>
+            <template x-if="scorePercent() === null">
+                <div class="text-gray-500 text-sm">No checks run yet</div>
+            </template>
         </div>
 
         <div class="flex flex-col items-center w-full md:w-auto">
@@ -326,6 +348,22 @@ function securityWizardApp() {
 
     <main class="p-4 max-w-7xl mx-auto">
         
+        <!-- How is this calculated? -->
+        <div x-show="result !== null" x-cloak class="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-6">
+            <button @click="showFormula = !showFormula" class="text-blue-400 text-sm hover:underline flex items-center gap-1">
+                <span x-text="showFormula ? 'Hide' : 'Show'"></span> How is this calculated?
+            </button>
+            <div x-show="showFormula" x-cloak class="mt-2 text-sm text-gray-300 space-y-2">
+                <div class="bg-gray-900 p-2 rounded font-mono text-xs" x-text="result.formula"></div>
+                <div class="text-xs text-gray-400">
+                    Weights: PASS=1.0, WARNING=0.5, CRITICAL=0.0, INFO/SKIPPED excluded
+                </div>
+                <div class="text-xs text-gray-400">
+                    Excluded from score: <span x-text="result.excluded"></span> checks (SKIPPED + INFO)
+                </div>
+            </div>
+        </div>
+
         <!-- Category Tabs & Severity Filter -->
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
             <div class="flex flex-wrap gap-2">
