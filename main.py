@@ -14,6 +14,8 @@ import uvicorn
 import scanner
 import remediator
 import auth
+import history
+import export
 
 app = FastAPI(title="SecurityWizard", version="1.0.0")
 
@@ -234,6 +236,60 @@ async def get_backups():
 async def rollback(req: RollbackRequest):
     result = await run_in_threadpool(remediator.rollback, req.snapshot_id)
     return result
+
+@app.get("/api/history")
+async def get_history():
+    scans = await run_in_threadpool(history.list_scans)
+    return {"scans": scans}
+
+@app.get("/api/history/diff")
+async def get_history_diff(old: str, new: str):
+    if not history.SCAN_ID_RE.match(old) or not history.SCAN_ID_RE.match(new):
+        raise HTTPException(status_code=400, detail="Invalid scan_id format")
+    old_scan = await run_in_threadpool(history.load_scan, old)
+    new_scan = await run_in_threadpool(history.load_scan, new)
+    if old_scan is None or new_scan is None:
+        missing = []
+        if old_scan is None:
+            missing.append(old)
+        if new_scan is None:
+            missing.append(new)
+        raise HTTPException(status_code=404, detail=f"Scan not found: {', '.join(missing)}")
+    diff = await run_in_threadpool(history.diff_scans, old_scan, new_scan)
+    return diff
+
+@app.get("/api/history/{scan_id}")
+async def get_history_scan(scan_id: str):
+    if not history.SCAN_ID_RE.match(scan_id):
+        raise HTTPException(status_code=400, detail="Invalid scan_id format")
+    scan = await run_in_threadpool(history.load_scan, scan_id)
+    if scan is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return scan
+
+@app.get("/api/export")
+async def get_export(fmt: str, scan_id: Optional[str] = None):
+    if fmt not in ("json", "markdown", "sarif", "html"):
+        raise HTTPException(status_code=400, detail="format must be json, markdown, sarif, or html")
+    if scan_id is not None and not history.SCAN_ID_RE.match(scan_id):
+        raise HTTPException(status_code=400, detail="Invalid scan_id format")
+    if scan_id:
+        scan = await run_in_threadpool(history.load_scan, scan_id)
+        if scan is None:
+            raise HTTPException(status_code=404, detail="Scan not found")
+    else:
+        with _scan_lock:
+            scan = _scan_state["result"]
+        if scan is None:
+            raise HTTPException(status_code=404, detail="No scan result available")
+    if fmt == "json":
+        return JSONResponse(content=json.loads(export.to_json(scan)))
+    elif fmt == "markdown":
+        return JSONResponse(content={"markdown": export.to_markdown(scan)})
+    elif fmt == "sarif":
+        return JSONResponse(content=json.loads(export.to_sarif(scan)))
+    else:
+        return JSONResponse(content={"html": export.to_html(scan)})
 
 if __name__ == "__main__":
     bind = os.environ.get("SECURITYWIZARD_BIND", "127.0.0.1")
