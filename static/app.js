@@ -76,7 +76,10 @@
       ['NIST SP 800-53', 'https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final']
     ],
     docker: [['CIS Docker Benchmark', 'https://www.cisecurity.org/benchmark/docker'], ['NIST SP 800-190', 'https://csrc.nist.gov/pubs/sp/800/190/final']],
-    ssh: [['CIS Distribution Independent Linux', 'https://www.cisecurity.org/benchmark/distribution_independent_linux'], ['NIST SP 800-53 AC-17', 'https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final']]
+    ssh: [['CIS Distribution Independent Linux', 'https://www.cisecurity.org/benchmark/distribution_independent_linux'], ['NIST SP 800-53 AC-17', 'https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final']],
+    tls: [['Mozilla SSL Configuration Generator', 'https://ssl-config.mozilla.org/'], ['NIST SP 800-52r2', 'https://csrc.nist.gov/pubs/sp/800/52/r2/final']],
+    web: [['OWASP Secure Headers Project', 'https://owasp.org/www-project-secure-headers/'], ['OWASP ASVS', 'https://owasp.org/www-project-application-security-verification-standard/']],
+    resilience: [['OWASP Denial of Service Cheat Sheet', 'https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html']]
   };
 
   var SEVERITIES = ['CRITICAL', 'WARNING', 'INFO', 'PASS', 'SKIPPED'];
@@ -232,7 +235,8 @@
     clear(box);
     var cats = categories();
     if (!cats.length) { return; }
-    [['all', t('cat.all')]].concat(cats.map(function (c) { return [c, c.charAt(0).toUpperCase() + c.slice(1)]; })).forEach(function (pair) {
+    var CATEGORY_LABELS = { tls: 'TLS' };
+    [['all', t('cat.all')]].concat(cats.map(function (c) { return [c, CATEGORY_LABELS[c] || (c.charAt(0).toUpperCase() + c.slice(1))]; })).forEach(function (pair) {
       box.appendChild(el('button', {
         type: 'button', class: 'tab', role: 'tab', 'aria-selected': state.tab === pair[0] ? 'true' : 'false', text: pair[1],
         onclick: function () { state.tab = pair[0]; renderTabs(); renderResults(); }

@@ -16,15 +16,46 @@ with a preview, a backup, a rollback and a safety timer for changes that could l
 | Network and firewall | Detects the real firewall backend (nftables, iptables, ufw, firewalld), INPUT policy and final reject rule, listening sockets with their process, services that should be private (databases, Redis, Docker API) listening on all interfaces, IPv6, and published Docker ports that bypass the firewall (checked against the `DOCKER-USER` chain). |
 | SSH | The *effective* configuration from `sshd -T` per listening port and user (Match blocks included), weak ciphers/MACs/key exchange, root and password login, `AllowUsers`/`AllowGroups`. |
 | Kernel | `sysctl` hardening (rp_filter aware of Docker/WireGuard hosts, `kptr_restrict`, `bpf_jit_harden`, `ptrace_scope`, ...). |
-| Privileges and filesystem | SUID/SGID files against a baseline and the package database, sudoers parsed properly (aliases, runas, tags, risky commands), sensitive file permissions, world-writable files without the sticky bit. |
+| Privileges and filesystem | SUID/SGID files against a baseline and the package database, sudoers parsed properly (aliases, runas, tags, risky commands), sensitive file permissions, world-writable files without the sticky bit, writable systemd unit files, and PATH-hijack opportunities for root-run commands. |
 | Access | `authorized_keys` inventory with fingerprints and restrictions, `docker` group members, sudoers inventory. |
 | Docker | Per-container findings by name: `docker.sock` mounts, privileged, host PID/network, added capabilities, root without `no-new-privileges`, sensitive host mounts. |
 | Logs and intrusion telemetry | Failed-login sources, fail2ban/CrowdSec, remote log shipping advice. |
 | System | auditd, unattended upgrades, pending reboot and kernel mismatch, `/tmp` mount options, core dumps, time sync, AppArmor/SELinux, local systemd unit sandboxing, TLS certificate expiry on local ports. |
+| TLS/certificates *(your own domains only, see below)* | Certificate chain validity and expiry, whether TLSv1/TLSv1.1 are still accepted, and the strength of the negotiated cipher, for 443, 465 and 993. |
+| Web response headers *(your own domains only)* | CSP, HSTS (including its `max-age`), X-Frame-Options, X-Content-Type-Options and Referrer-Policy on the home page. |
+| Resilience and availability | Config-only review (never a load test): Traefik/Nginx/Stalwart rate-limit, request-size and timeout settings, and fail2ban/CrowdSec jail scoping and ban thresholds. |
 
 Every result shows what was checked, the current and recommended value, why it matters, the exact evidence, a manual
 command you can copy, and reference links. A check is **PASS**, **WARNING**, **CRITICAL**, **INFO** or **SKIPPED**;
 a skipped check always says exactly why (missing tool, no permission, timeout, ...).
+
+## Authorized use and the active-check target allowlist
+
+The checks above that are read-only, local configuration or system inspection run unconditionally, as on any
+security scanner. The **TLS/certificate** and **web response header** checks are different: they make a network
+request (a TLS handshake, or a single HTTPS GET) to a hostname. **SecurityWizard is built to audit infrastructure
+you own or are authorized to test, never a third party, so these checks refuse to run against anything you have not
+explicitly listed.**
+
+Add every domain (and, for IP-based checks, CIDR) you want audited under `[pentest]` in `securitywizard.toml`:
+
+```toml
+[pentest]
+targets = [
+    {host = "example.com", reason = "primary web domain"},
+    {host = "mail.example.com", reason = "mail server"},
+    {cidr = "203.0.113.10/32", reason = "the server's public IPv4 address"},
+]
+```
+
+Anything not listed is reported as **SKIPPED** with the reason "not in the \[pentest\] target allowlist", never
+silently probed. Every run of an active check is written to the audit log (`check_id`, `target`, `result`,
+`timestamp`) alongside logins and remediation actions.
+
+This module is deliberately **not** a general-purpose pentesting or exploitation toolkit: there is no port scanner,
+no credential testing against login forms, no mail-server open-relay or account-enumeration probe, and no traffic
+generation of any kind. The resilience checks only read configuration files; SecurityWizard never sends a burst of
+requests or connections to see how a service behaves under load.
 
 ## Quick start
 
@@ -157,6 +188,10 @@ docker_public_ports = [ {port = 443, container = "coolify-proxy", reason = "Publ
 docker_privileged = [ {name = "coolify-sentinel", reason = "Host metrics"} ]
 sudo_rules = [ {user = "deploy", command = "/usr/local/bin/restart-app", reason = "Deploy hook"} ]
 suid_files = [ {path = "/usr/local/bin/custom-su", reason = "Packaged by us"} ]
+
+# Domains/IPs the TLS and web-header checks are allowed to touch; see "Authorized use" above.
+[pentest]
+targets = [ {host = "example.com", reason = "primary web domain"} ]
 
 # A risk you accept: the finding becomes INFO, keeps its original status and your reason,
 # and stops counting in the score. Entries can expire.

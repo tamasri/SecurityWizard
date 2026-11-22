@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 import os
 from dataclasses import dataclass, field
@@ -56,6 +57,15 @@ class SuidFileAllow:
 
 
 @dataclass
+class PentestTarget:
+    """An explicitly allowlisted active-testing target: a hostname, or a CIDR for IP-based checks."""
+
+    host: Optional[str] = None
+    cidr: Optional[str] = None
+    reason: str = ""
+
+
+@dataclass
 class AcceptedRisk:
     check_id: str
     reason: str
@@ -72,6 +82,7 @@ class Config:
     sudo_rules: List[SudoRuleAllow] = field(default_factory=list)
     suid_files: List[SuidFileAllow] = field(default_factory=list)
     accepted_risks: List[AcceptedRisk] = field(default_factory=list)
+    pentest_targets: List[PentestTarget] = field(default_factory=list)
 
     def is_accepted(self, check_id: str, evidence: str = "") -> Optional[AcceptedRisk]:
         for risk in self.accepted_risks:
@@ -133,6 +144,28 @@ class Config:
             if entry.path == path:
                 return entry
         return None
+
+    def is_target_allowed(self, target: str) -> bool:
+        """Active checks (TLS probes, header fetches, future network/mail/web probes) call this before
+        touching anything: `target` may be a hostname or an IP address, and must be explicitly listed
+        under [pentest].targets (by exact host match or by a CIDR that contains it)."""
+        target = (target or "").strip().rstrip(".").lower()
+        if not target:
+            return False
+        for entry in self.pentest_targets:
+            if entry.host and entry.host.lower() == target:
+                return True
+            if entry.cidr:
+                try:
+                    ip = ipaddress.ip_address(target)
+                except ValueError:
+                    continue
+                try:
+                    if ip in ipaddress.ip_network(entry.cidr, strict=False):
+                        return True
+                except ValueError:
+                    continue
+        return False
 
 
 _config_cache: Optional[Config] = None
@@ -232,6 +265,23 @@ def _validate_suid_file(entry: Any, index: int) -> SuidFileAllow:
     return SuidFileAllow(path=path, reason=reason)
 
 
+def _validate_pentest_target(entry: Any, index: int) -> PentestTarget:
+    if not isinstance(entry, dict):
+        raise ConfigError(f"pentest.targets[{index}] must be a table")
+    host = entry.get("host")
+    cidr = entry.get("cidr")
+    if host is not None and not isinstance(host, str):
+        raise ConfigError(f"pentest.targets[{index}].host must be a string")
+    if cidr is not None and not isinstance(cidr, str):
+        raise ConfigError(f"pentest.targets[{index}].cidr must be a string")
+    if bool(host) == bool(cidr):
+        raise ConfigError(f"pentest.targets[{index}] must set exactly one of 'host' or 'cidr'")
+    reason = entry.get("reason", "")
+    if not isinstance(reason, str):
+        raise ConfigError(f"pentest.targets[{index}].reason must be a string")
+    return PentestTarget(host=host, cidr=cidr, reason=reason)
+
+
 def _validate_accepted_risk(entry: Any, index: int) -> AcceptedRisk:
     if not isinstance(entry, dict):
         raise ConfigError(f"accepted_risks[{index}] must be a table")
@@ -303,6 +353,15 @@ def _parse_config(data: Dict[str, Any]) -> Config:
         raise ConfigError("allow.suid_files must be an array")
     for i, entry in enumerate(suid_files):
         config.suid_files.append(_validate_suid_file(entry, i))
+
+    pentest = data.get("pentest", {})
+    if not isinstance(pentest, dict):
+        raise ConfigError("'pentest' must be a table")
+    pentest_targets = pentest.get("targets", [])
+    if not isinstance(pentest_targets, list):
+        raise ConfigError("pentest.targets must be an array")
+    for i, entry in enumerate(pentest_targets):
+        config.pentest_targets.append(_validate_pentest_target(entry, i))
 
     accepted_risks = data.get("accepted_risk", [])
     if not isinstance(accepted_risks, list):
@@ -381,6 +440,16 @@ sudo_rules = [
 # SUID files that are expected
 suid_files = [
     {path = "/usr/bin/passwd", reason = "Standard SUID binary"},
+]
+
+# Explicit allowlist of targets that the active pentest-style checks (TLS, web headers, and anything
+# added later such as external port scans or mail probes) are allowed to touch. Anything not listed here
+# is refused with a clear reason instead of being tested.
+[pentest]
+targets = [
+    {host = "example.com", reason = "primary web domain"},
+    {host = "mail.example.com", reason = "mail server"},
+    {cidr = "203.0.113.10/32", reason = "the server's public IPv4 address"},
 ]
 
 # Accepted risks: suppress specific findings with a reason and optional expiry

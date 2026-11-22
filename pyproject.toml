@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "securitywizard"
-version = "2.0.0"
+version = "2.1.0"
 description = "Self-hosted security audit and hardening dashboard for Ubuntu and Debian servers"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,9 +32,10 @@ dev = [
 [tool.setuptools]
 py-modules = [
     "actions_network", "actions_ssh", "actions_system", "auth", "checks_access", "checks_docker", "checks_kernel",
-    "checks_logs", "checks_misc", "checks_network", "checks_privilege", "checks_ssh", "checks_system", "common",
-    "config", "deadman", "docker_ports", "envdetect", "export", "firewall", "history", "main", "remediator",
-    "scanner", "security", "sshd_effective", "sudoers_parse",
+    "checks_logs", "checks_misc", "checks_network", "checks_privilege", "checks_resilience", "checks_ssh",
+    "checks_system", "checks_tls", "checks_web", "common", "config", "deadman", "docker_ports", "envdetect",
+    "export", "firewall", "history", "main", "pentest_common", "remediator", "scanner", "security",
+    "sshd_effective", "sudoers_parse",
 ]
 
 [tool.ruff]

@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-11-22
+
+### Added
+- **TLS/certificate auditing** for the operator's own domains: certificate chain validity and expiry, whether
+  TLSv1/TLSv1.1 are still accepted, and the strength of the negotiated cipher, on 443/465/993 (`checks_tls.py`).
+- **Web response header auditing**: CSP, HSTS (with `max-age`), X-Frame-Options, X-Content-Type-Options and
+  Referrer-Policy on the operator's own domains (`checks_web.py`).
+- **Resilience/availability configuration review** (never a load test): Traefik/Nginx/Stalwart rate-limit,
+  request-size and timeout settings, and fail2ban/CrowdSec jail scoping with ban-threshold sanity checks
+  (`checks_resilience.py`).
+- **Privilege-escalation path discovery extended**: writable local systemd unit files (PRV-009) and PATH-hijack
+  opportunities for root-run commands (PRV-010).
+- **Explicit target allowlist** (`[pentest].targets` in the configuration file) that every active, network-touching
+  check must pass before it runs; anything not listed is refused with a clear reason instead of being probed.
+  Every active check writes an entry (check id, target, result, timestamp) to the same audit log used for logins
+  and remediation actions (`pentest_common.py`).
+- These checks are built for authorized use against infrastructure you own or control. There is deliberately no
+  port scanner, no credential testing against login forms, no mail-server open-relay or account-enumeration probe,
+  and no traffic-generation/load-testing capability of any kind.
+
+### Fixed
+- A `fetch`/`connect` callable that returned headers or a result in a different case than expected could make the
+  header check under-report (now normalised defensively, not only in the default network path).
+- `checks_resilience.run_checks()` derived a check's id from the running function's `__name__`, which broke if a
+  different callable ended up bound to the same name (now each check's id is explicit, not name-derived).
+
 ## [2.0.0] - 2026-11-21
 
 ### Security

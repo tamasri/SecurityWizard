@@ -600,6 +600,137 @@ def _check_nopasswd():
 
 
 # ---------------------------------------------------------------------------
+# PRV-009  Writable systemd unit files (local overrides, not vendor units)
+# ---------------------------------------------------------------------------
+def _check_writable_systemd_units():
+    """Writable systemd unit files (local overrides)."""
+    unit_dir = "/etc/systemd/system"
+    what = "Checks local systemd unit files (/etc/systemd/system/*.service) for a group- or world-write permission bit."
+    risk = (
+        "A writable unit file lets an attacker rewrite ExecStart to run arbitrary code the next time the "
+        "unit starts or is reloaded, almost always as root."
+    )
+    cmd = "find /etc/systemd/system -maxdepth 1 -name '*.service' -perm -0022 -ls"
+    if not os.path.isdir(unit_dir):
+        return skipped_check(
+            "PRV-009",
+            CATEGORY,
+            "Writable systemd unit files",
+            what,
+            risk,
+            cmd,
+            unit_dir + " does not exist",
+        )
+    writable = []
+    scanned = 0
+    try:
+        for name in sorted(glob.glob(unit_dir + "/*.service")):
+            if os.path.islink(name):
+                continue  # a symlink to a vendor unit under /lib or /usr/lib, not a local override
+            try:
+                st = os.stat(name)
+            except OSError:
+                continue
+            scanned += 1
+            if stat.S_IMODE(st.st_mode) & 0o022:
+                writable.append(name)
+    except OSError as exc:
+        return skipped_check("PRV-009", CATEGORY, "Writable systemd unit files", what, risk, cmd, str(exc))
+
+    if writable:
+        status = STATUS_CRITICAL
+        current_value = "{} writable unit file(s): {}".format(len(writable), ", ".join(writable))
+        details = writable
+    elif scanned == 0:
+        status = STATUS_INFO
+        current_value = "No local .service unit files found"
+        details = ["No local unit files to check (vendor-only units are not flagged here)."]
+    else:
+        status = STATUS_PASS
+        current_value = "All {} local unit file(s) are not group/world-writable".format(scanned)
+        details = ["No writable local unit files found."]
+
+    return make_check(
+        "PRV-009",
+        CATEGORY,
+        "Writable systemd unit files",
+        status,
+        what,
+        risk,
+        cmd,
+        current_value=current_value,
+        recommended_value="Unit files owned by root with no group/world write bit",
+        details=details,
+        remediation_id=None,
+        manual_command="chmod g-w,o-w /etc/systemd/system/<unit>.service",
+    )
+
+
+# ---------------------------------------------------------------------------
+# PRV-010  PATH hijack opportunities for root-run commands
+# ---------------------------------------------------------------------------
+def _root_path_value():
+    """Best-effort PATH that root-run cron jobs and scripts would see: /etc/environment first, then the
+    process's own PATH, then a conservative default."""
+    content = read_text("/etc/environment", "")
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith("PATH="):
+            value = line.split("=", 1)[1].strip().strip('"')
+            if value:
+                return value
+    return os.environ.get("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+
+
+def _check_path_hijack():
+    """PATH hijack opportunities for root-run commands."""
+    path_value = _root_path_value()
+    entries = path_value.split(":")
+    issues = []
+    writable_dirs = []
+    relative_entries = []
+    for entry in entries:
+        if entry in ("", "."):
+            relative_entries.append(entry if entry else "(empty)")
+            continue
+        try:
+            st = os.stat(entry)
+        except OSError:
+            continue
+        if stat.S_ISDIR(st.st_mode) and (st.st_mode & 0o022):
+            writable_dirs.append(entry)
+
+    if relative_entries:
+        issues.append(
+            "PATH contains a relative/current-directory entry ({}); any writable working directory can "
+            "hijack a bare command name.".format(", ".join(relative_entries))
+        )
+    if writable_dirs:
+        issues.append("Group/world-writable directories in PATH: " + ", ".join(writable_dirs))
+
+    status = STATUS_CRITICAL if issues else STATUS_PASS
+    current_value = "; ".join(issues) if issues else "PATH is clean: " + path_value
+
+    return make_check(
+        "PRV-010",
+        CATEGORY,
+        "PATH hijack opportunities for root-run commands",
+        status,
+        "Checks root's effective PATH for a relative/current-directory entry or a group/world-writable "
+        "directory, either of which lets a local attacker place a malicious binary that a root script or "
+        "cron job runs first.",
+        "A hijacked PATH lets an unprivileged local user escalate to root the next time a root-owned "
+        "script or cron job calls a bare command name instead of an absolute path.",
+        'echo $PATH; IFS=: read -ra d <<< "$PATH"; for p in "${d[@]}"; do stat -c \'%A %n\' "$p"; done',
+        current_value=current_value,
+        recommended_value="Every PATH entry is an absolute, non-writable directory; no '.' or empty entry.",
+        details=issues or ["PATH=" + path_value],
+        remediation_id=None,
+        manual_command="chmod o-w,g-w <directory>",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 def run_checks():
@@ -614,6 +745,8 @@ def run_checks():
         _check_sshd_config,
         _check_cron,
         _check_nopasswd,
+        _check_writable_systemd_units,
+        _check_path_hijack,
     ]
     for func in check_funcs:
         try:

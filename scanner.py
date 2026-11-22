@@ -26,6 +26,9 @@ MODULES = [
     ("misc", "checks_misc"),
     ("access", "checks_access"),
     ("system", "checks_system"),
+    ("tls", "checks_tls"),
+    ("web", "checks_web"),
+    ("resilience", "checks_resilience"),
 ]
 
 

@@ -15,7 +15,7 @@ SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 
 def test_version_is_semver_two_zero_zero():
     assert SEMVER.match(common.__version__)
-    assert common.__version__ == "2.0.0"
+    assert common.__version__ == "2.1.0"
     assert main.app.version == common.__version__
 
 
@@ -31,7 +31,7 @@ def test_version_is_served_and_shown():
 
 def test_changelog_has_the_current_release():
     text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert re.search(r"^## \[2\.0\.0\]", text, re.M)
+    assert re.search(r"^## \[" + re.escape(common.__version__) + r"\]", text, re.M)
 
 
 def test_readme_documents_every_environment_variable_used_by_the_code():

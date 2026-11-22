@@ -13,10 +13,12 @@ from common import STATUS_CRITICAL, STATUS_INFO, STATUS_PASS, STATUS_SKIPPED, ST
 class FakeFS:
     """Files and their (mode, uid, gid), plus glob patterns, for the functions of checks_privilege."""
 
-    def __init__(self, monkeypatch, files=None, globs=None, dirs=()):
+    def __init__(self, monkeypatch, files=None, globs=None, dirs=(), dir_modes=None, symlinks=()):
         self.files = dict(files or {})
         self.globs = dict(globs or {})
-        self.dirs = set(dirs)
+        self.dirs = set(dirs) | set(dir_modes or {})
+        self.dir_modes = dict(dir_modes or {})
+        self.symlinks = set(symlinks)
         real_stat = os.stat
 
         def isfile(path):
@@ -25,7 +27,12 @@ class FakeFS:
         def isdir(path):
             return path in self.dirs
 
+        def islink(path):
+            return path in self.symlinks
+
         def fake_stat(path, *args, **kwargs):
+            if path in self.dir_modes:
+                return SimpleNamespace(st_mode=stat.S_IFDIR | self.dir_modes[path], st_uid=0, st_gid=0)
             if path in self.files:
                 mode, uid, gid = self.files[path]
                 return SimpleNamespace(st_mode=stat.S_IFREG | mode, st_uid=uid, st_gid=gid)
@@ -33,6 +40,7 @@ class FakeFS:
 
         monkeypatch.setattr(checks_privilege.os.path, "isfile", isfile)
         monkeypatch.setattr(checks_privilege.os.path, "isdir", isdir)
+        monkeypatch.setattr(checks_privilege.os.path, "islink", islink)
         monkeypatch.setattr(checks_privilege.os, "stat", fake_stat)
         monkeypatch.setattr(checks_privilege.glob, "glob", lambda pattern: list(self.globs.get(pattern, [])))
 
@@ -266,7 +274,7 @@ def test_sudoers_status_is_the_worst_rule(monkeypatch, classified, expected, tex
 # ---- run_checks --------------------------------------------------------------------------------------------------------------
 
 
-def test_run_checks_returns_eight_results(monkeypatch):
+def test_run_checks_returns_ten_results(monkeypatch):
     FakeFS(monkeypatch)
     import sudoers_parse
 
@@ -274,7 +282,8 @@ def test_run_checks_returns_eight_results(monkeypatch):
     monkeypatch.setattr(checks_privilege, "get_config", lambda: None)
     results = checks_privilege.run_checks()
     assert [r["id"] for r in results][:6] == ["PRV-001", "PRV-002", "PRV-003", "PRV-004", "PRV-005", "PRV-006"]
-    assert len(results) == 8
+    assert [r["id"] for r in results][-2:] == ["PRV-009", "PRV-010"]
+    assert len(results) == 10
 
 
 def test_run_checks_turns_an_exception_into_a_skipped_result(monkeypatch):
@@ -290,8 +299,134 @@ def test_run_checks_turns_an_exception_into_a_skipped_result(monkeypatch):
         "_check_sshd_config",
         "_check_cron",
         "_check_nopasswd",
+        "_check_writable_systemd_units",
+        "_check_path_hijack",
     ):
         monkeypatch.setattr(checks_privilege, name, boom)
     boom.__doc__ = None
     results = checks_privilege.run_checks()
-    assert len(results) == 8 and all(r["status"] == STATUS_SKIPPED for r in results)
+    assert len(results) == 10 and all(r["status"] == STATUS_SKIPPED for r in results)
+
+
+# ---- PRV-009: writable systemd unit files --------------------------------------------------------------------
+
+
+def test_writable_systemd_units_missing_dir(monkeypatch):
+    FakeFS(monkeypatch)
+    result = checks_privilege._check_writable_systemd_units()
+    assert result["id"] == "PRV-009" and result["status"] == STATUS_SKIPPED
+
+
+def test_writable_systemd_units_no_local_units(monkeypatch):
+    FakeFS(monkeypatch, dirs={"/etc/systemd/system"}, globs={"/etc/systemd/system/*.service": []})
+    result = checks_privilege._check_writable_systemd_units()
+    assert result["status"] == STATUS_INFO and "No local" in result["current_value"]
+
+
+def test_writable_systemd_units_all_clean(monkeypatch):
+    FakeFS(
+        monkeypatch,
+        dirs={"/etc/systemd/system"},
+        files={"/etc/systemd/system/app.service": (0o644, 0, 0)},
+        globs={"/etc/systemd/system/*.service": ["/etc/systemd/system/app.service"]},
+    )
+    result = checks_privilege._check_writable_systemd_units()
+    assert result["status"] == STATUS_PASS and "All 1" in result["current_value"]
+
+
+def test_writable_systemd_unit_is_flagged(monkeypatch):
+    FakeFS(
+        monkeypatch,
+        dirs={"/etc/systemd/system"},
+        files={"/etc/systemd/system/bad.service": (0o664, 0, 0)},
+        globs={"/etc/systemd/system/*.service": ["/etc/systemd/system/bad.service"]},
+    )
+    result = checks_privilege._check_writable_systemd_units()
+    assert result["status"] == STATUS_CRITICAL and "bad.service" in result["current_value"]
+
+
+def test_vendor_symlinked_units_are_not_flagged(monkeypatch):
+    FakeFS(
+        monkeypatch,
+        dirs={"/etc/systemd/system"},
+        files={"/etc/systemd/system/vendor.service": (0o666, 0, 0)},
+        globs={"/etc/systemd/system/*.service": ["/etc/systemd/system/vendor.service"]},
+        symlinks={"/etc/systemd/system/vendor.service"},
+    )
+    result = checks_privilege._check_writable_systemd_units()
+    assert result["status"] == STATUS_INFO  # the only unit was a symlink, so nothing local was scanned
+
+
+def test_writable_systemd_units_skips_a_file_that_vanished_between_glob_and_stat(monkeypatch):
+    FakeFS(
+        monkeypatch,
+        dirs={"/etc/systemd/system"},
+        files={"/etc/systemd/system/ok.service": (0o644, 0, 0)},
+        globs={"/etc/systemd/system/*.service": ["/etc/systemd/system/ok.service", "/etc/systemd/system/gone.service"]},
+    )
+    result = checks_privilege._check_writable_systemd_units()
+    assert result["status"] == STATUS_PASS and "All 1" in result["current_value"]
+
+
+def test_writable_systemd_units_survives_a_glob_error(monkeypatch):
+    FakeFS(monkeypatch, dirs={"/etc/systemd/system"})
+
+    def boom(pattern):
+        raise OSError("denied")
+
+    monkeypatch.setattr(checks_privilege.glob, "glob", boom)
+    assert checks_privilege._check_writable_systemd_units()["status"] == STATUS_SKIPPED
+
+
+# ---- PRV-010: PATH hijack opportunities ------------------------------------------------------------------------
+
+
+def test_path_hijack_clean_path(monkeypatch):
+    monkeypatch.setattr(checks_privilege, "read_text", lambda path, default="": default)
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    FakeFS(monkeypatch, dir_modes={"/usr/bin": 0o755, "/bin": 0o755})
+    result = checks_privilege._check_path_hijack()
+    assert result["id"] == "PRV-010" and result["status"] == STATUS_PASS
+    assert "/usr/bin:/bin" in result["current_value"]
+
+
+def test_path_hijack_flags_writable_directory(monkeypatch):
+    monkeypatch.setattr(checks_privilege, "read_text", lambda path, default="": default)
+    monkeypatch.setenv("PATH", "/usr/bin:/opt/evil")
+    FakeFS(monkeypatch, dir_modes={"/usr/bin": 0o755, "/opt/evil": 0o777})
+    result = checks_privilege._check_path_hijack()
+    assert result["status"] == STATUS_CRITICAL and "/opt/evil" in result["current_value"]
+
+
+def test_path_hijack_flags_relative_entry(monkeypatch):
+    monkeypatch.setattr(checks_privilege, "read_text", lambda path, default="": default)
+    monkeypatch.setenv("PATH", "/usr/bin::/bin")
+    FakeFS(monkeypatch, dir_modes={"/usr/bin": 0o755, "/bin": 0o755})
+    result = checks_privilege._check_path_hijack()
+    assert result["status"] == STATUS_CRITICAL and "relative/current-directory" in result["current_value"]
+
+
+def test_path_hijack_prefers_etc_environment(monkeypatch):
+    monkeypatch.setattr(
+        checks_privilege, "read_text", lambda path, default="": 'PATH="/custom/bin:/usr/bin"\nFOO=bar\n'
+    )
+    monkeypatch.setenv("PATH", "/should/not/be/used")
+    FakeFS(monkeypatch, dir_modes={"/custom/bin": 0o755, "/usr/bin": 0o755})
+    result = checks_privilege._check_path_hijack()
+    assert "/custom/bin:/usr/bin" in result["current_value"] and "/should/not/be/used" not in result["current_value"]
+
+
+def test_path_hijack_falls_back_to_default_when_nothing_is_set(monkeypatch):
+    monkeypatch.setattr(checks_privilege, "read_text", lambda path, default="": default)
+    monkeypatch.delenv("PATH", raising=False)
+    FakeFS(monkeypatch)
+    result = checks_privilege._check_path_hijack()
+    assert "/usr/bin" in result["current_value"]
+
+
+def test_path_hijack_ignores_nonexistent_entries(monkeypatch):
+    monkeypatch.setattr(checks_privilege, "read_text", lambda path, default="": default)
+    monkeypatch.setenv("PATH", "/does/not/exist:/usr/bin")
+    FakeFS(monkeypatch, dir_modes={"/usr/bin": 0o755})
+    result = checks_privilege._check_path_hijack()
+    assert result["status"] == STATUS_PASS
