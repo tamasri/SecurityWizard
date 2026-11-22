@@ -90,6 +90,6 @@ def test_remediator_recovers_through_the_snapshot_id(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     rolled_back = []
-    monkeypatch.setattr(remediator, "rollback", lambda snapshot: rolled_back.append(snapshot))
+    monkeypatch.setattr(remediator, "rollback", lambda snapshot, force=False: rolled_back.append((snapshot, force)))
     assert remediator.recover_deadman() == []
-    assert rolled_back == ["20260101T000000_ssh_x"]
+    assert rolled_back == [("20260101T000000_ssh_x", True)]  # a safety revert is allowed even in dry-run mode

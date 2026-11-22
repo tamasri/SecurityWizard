@@ -63,9 +63,61 @@ To supply your own credentials instead, set `SECURITYWIZARD_PASSWORD_HASH` (crea
    and are refused when they could cut off your current connection.
 4. **Rollback**: restore any backup with one click.
 
-Applying is **off by default**. The shipped systemd unit runs with `SECURITYWIZARD_DRY_RUN_ONLY=1`; remove that variable
-to allow changes. `SECURITYWIZARD_READONLY=1` disables applying and rollback completely.
+Applying is **off by default** (see [Dry-run mode versus applying changes](#dry-run-mode-versus-applying-changes)).
 Every login attempt, preview, apply, rollback and credential change is written to an audit log.
+
+## Dry-run mode versus applying changes
+
+One setting decides whether SecurityWizard may change the server: `SECURITYWIZARD_DRY_RUN_ONLY`.
+**Dry-run is the default.** Only an explicit `0` (or `false`, `no`, `off`) allows changes; unset, `1` or any other value
+keeps the server untouched. The shipped systemd unit and the Docker image also set it to `1` explicitly.
+
+| | Dry-run (default) | Changes allowed (`SECURITYWIZARD_DRY_RUN_ONLY=0`) |
+|---|---|---|
+| Scanning, scoring, history, exports | Works, read-only commands only | Same |
+| Preview of a fix (exact commands and file diffs) | Works, nothing is changed | Same |
+| **Apply** a fix | Refused with "dry-run only"; the button is disabled and says why | Allowed after you confirm, when every condition below holds |
+| **Rollback** of a backup | Refused; the button is disabled | Allowed |
+| Backup before a change | None needed, nothing changes | Timestamped snapshot of every file the fix touches |
+| Safety timer for SSH and firewall changes | Not used | Armed: the change reverts after 5 minutes unless you press **Keep this change** |
+| Unconfirmed change left over after a restart | Still reverted (that is a safety action) | Reverted, or its timer re-armed |
+| What the tool writes | Only its own files: scan history, audit log, credentials | Also the files of the fixes listed below |
+
+`SECURITYWIZARD_READONLY=1` is stricter still: scanning works, but applying, rollback and keeping a change are refused
+whatever `SECURITYWIZARD_DRY_RUN_ONLY` says.
+
+### What it can and cannot change when changes are allowed
+
+A change is applied only when **all** of these hold: dry-run is off, read-only mode is off, you are logged in and the
+request carries the CSRF header, you ticked the confirmation, the process runs as root (or `SECURITYWIZARD_ALLOW_NONROOT=1`),
+the fix exists in the built-in list below, the plan has no blockers and its anti-lockout check passes, and it is not
+already in place. Nothing outside this list can be changed, because ids are checked against the list and every command
+is a fixed argument list (no shell).
+
+| Fix | What it touches |
+|---|---|
+| `ssh_permit_root_login`, `ssh_password_auth`, `ssh_pubkey_auth`, `ssh_max_auth_tries`, `ssh_empty_passwords`, `ssh_x11_forwarding` | One setting in `/etc/ssh/sshd_config` (or the drop-in in `/etc/ssh/sshd_config.d/` that sets it), checked with `sshd -t` before it is kept, then `systemctl reload ssh`. Refused when it could lock you out, for example when no authorized key exists. |
+| `ufw_baseline` | `ufw default deny incoming`, `ufw default allow outgoing`, an allow rule for each detected SSH port, `ufw --force enable` (ufw updates its own rule files, which are backed up). Refused when ufw is missing or the SSH port cannot be determined. |
+| `docker_user_isolation` | A marked block in `/etc/ufw/after.rules` for the `DOCKER-USER` chain, then `ufw reload`. Needs ufw and Docker. |
+| `sysctl_baseline` | Writes `/etc/sysctl.d/99-securitywizard.conf` and runs `sysctl --system`. |
+| `fix_perm_passwd`, `fix_perm_shadow`, `fix_perm_group`, `fix_perm_sudoers`, `fix_perm_sshd_config` | Mode and ownership of `/etc/passwd`, `/etc/shadow`, `/etc/group`, `/etc/sudoers` and `/etc/ssh/sshd_config` only. |
+
+It **cannot** run arbitrary commands, install or remove packages, edit users, passwords or the content of sudoers,
+touch containers or images, or delete files other than ones that a fix created and that a rollback restores.
+
+The service unit confines it further: `NoNewPrivileges`, a read-only system (`ProtectSystem=strict`) with writes allowed
+only in `/etc`, `/var/log` and the backup directory, `PrivateTmp`, read-only home directories, a short capability list and
+only local and IP sockets. `/etc` has to stay writable because the fixes edit files there; a deployment that only needs
+scanning should set `SECURITYWIZARD_READONLY=1`.
+
+To allow changes on the service:
+
+```bash
+sudo systemctl edit securitywizard      # add the two lines below, save
+#   [Service]
+#   Environment=SECURITYWIZARD_DRY_RUN_ONLY=0
+sudo systemctl restart securitywizard
+```
 
 ## Configuration
 
@@ -82,7 +134,7 @@ Every login attempt, preview, apply, rollback and credential change is written t
 | `SECURITYWIZARD_PASSWORD_HASH` | unset | Password hash (argon2 or PBKDF2) instead of generated credentials. |
 | `SECURITYWIZARD_PASSWORD_FILE` | unset | File containing that hash. |
 | `SECURITYWIZARD_TOKEN` | unset | Static bearer token for automation. |
-| `SECURITYWIZARD_DRY_RUN_ONLY` | unset | `1` allows previews only. |
+| `SECURITYWIZARD_DRY_RUN_ONLY` | `1` (dry-run) | Dry-run is the default; only an explicit `0` allows changes. |
 | `SECURITYWIZARD_READONLY` | unset | `1` disables applying fixes and rollback entirely. |
 | `SECURITYWIZARD_ALLOW_NONROOT` | unset | `1` allows running without root (limited visibility, no fixes). |
 | `SECURITYWIZARD_BACKUP_DIR` | `/var/backups/securitywizard` | Backups, dead-man state. |

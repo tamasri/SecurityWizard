@@ -59,6 +59,11 @@ def init() -> None:
     logger.info("Security module initialized. Allowed hosts: %s", ALLOWED_HOSTS)
 
 
+def is_dry_run_only() -> bool:
+    """Dry-run is the default: nothing is changed unless SECURITYWIZARD_DRY_RUN_ONLY is explicitly set to 0."""
+    return os.environ.get("SECURITYWIZARD_DRY_RUN_ONLY", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
 def is_readonly() -> bool:
     """Check if read-only mode is enabled."""
     return os.environ.get("SECURITYWIZARD_READONLY", "0") == "1"

@@ -245,7 +245,7 @@ async def get_status():
 
     return {
         "version": __version__,
-        "dry_run_only": os.environ.get("SECURITYWIZARD_DRY_RUN_ONLY", "0") == "1",
+        "dry_run_only": security.is_dry_run_only(),
         "is_root": is_root(),
         "readonly": security.is_readonly(),
         "auth_enabled": auth.is_auth_enabled(),

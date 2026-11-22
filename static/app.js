@@ -27,7 +27,7 @@
       'fix.title': 'Fix preview', 'fix.confirm': 'I reviewed the changes and want to apply them.', 'fix.apply': 'Apply fix', 'fix.keep': 'Keep this change',
       'fix.blocked': 'This fix cannot be applied', 'fix.warnings': 'Warnings', 'fix.commands': 'Commands that will run', 'fix.files': 'File changes',
       'fix.perms': 'Permission changes', 'fix.noChanges': 'No file or command changes.', 'fix.result': 'Result', 'fix.applied': 'Applied. A backup was created.',
-      'fix.dryRunOnly': 'Apply is disabled: the server runs in dry-run-only mode (SECURITYWIZARD_DRY_RUN_ONLY=1).',
+      'fix.dryRunOnly': 'Apply is disabled: the server runs in dry-run-only mode (set SECURITYWIZARD_DRY_RUN_ONLY=0 to allow changes).',
       'fix.readOnly': 'Apply is disabled: the server runs in read-only mode.', 'fix.needRoot': 'Applying needs root privileges.',
       'fix.deadman': 'Safety timer: this change will be reverted automatically in {time} unless you keep it.',
       'fix.deadmanExpired': 'The safety timer expired: the change was reverted.', 'fix.kept': 'The change was kept.',
@@ -59,7 +59,7 @@
       'fix.title': 'معاينة الإصلاح', 'fix.confirm': 'راجعت التغييرات وأريد تطبيقها.', 'fix.apply': 'طبّق الإصلاح', 'fix.keep': 'أبقِ هذا التغيير',
       'fix.blocked': 'لا يمكن تطبيق هذا الإصلاح', 'fix.warnings': 'تحذيرات', 'fix.commands': 'الأوامر التي ستُنفَّذ', 'fix.files': 'تغييرات الملفات',
       'fix.perms': 'تغييرات الصلاحيات', 'fix.noChanges': 'لا توجد تغييرات في الملفات أو الأوامر.', 'fix.result': 'النتيجة', 'fix.applied': 'تم التطبيق. أُنشئت نسخة احتياطية.',
-      'fix.dryRunOnly': 'التطبيق معطّل: الخادم يعمل في وضع المعاينة فقط (SECURITYWIZARD_DRY_RUN_ONLY=1).',
+      'fix.dryRunOnly': 'التطبيق معطّل: الخادم يعمل في وضع المعاينة فقط (اضبط SECURITYWIZARD_DRY_RUN_ONLY=0 للسماح بالتغييرات).',
       'fix.readOnly': 'التطبيق معطّل: الخادم يعمل في وضع القراءة فقط.', 'fix.needRoot': 'التطبيق يتطلب صلاحيات الجذر.',
       'fix.deadman': 'مؤقّت أمان: سيتم التراجع عن هذا التغيير تلقائياً خلال {time} ما لم تُبقِه.',
       'fix.deadmanExpired': 'انتهى مؤقّت الأمان: جرى التراجع عن التغيير.', 'fix.kept': 'تم الإبقاء على التغيير.',
@@ -509,7 +509,7 @@
     var s = state.status || {};
     backupItems.forEach(function (b) {
       var btn = el('button', {
-        type: 'button', class: 'btn btn-small', text: t('backups.rollback'), disabled: !!s.readonly,
+        type: 'button', class: 'btn btn-small', text: t('backups.rollback'), disabled: !!(s.readonly || s.dry_run_only),
         onclick: function () {
           if (!window.confirm(t('backups.confirm'))) { return; }
           api('POST', '/api/rollback', { snapshot_id: b.snapshot_id }).then(function (r) { notice(r.message || '', r.ok ? 'ok' : 'error'); }).catch(fail);

@@ -168,7 +168,9 @@ def apply_accepted_risks(checks: List[dict]) -> int:
 
 
 def _build_result(start_iso, checks):
-    dry_run_only = os.environ.get("SECURITYWIZARD_DRY_RUN_ONLY", "0") == "1"
+    from security import is_dry_run_only
+
+    dry_run_only = is_dry_run_only()
     for c in checks:
         rid = c.get("remediation_id")
         if rid:

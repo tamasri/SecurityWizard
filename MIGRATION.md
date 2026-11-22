@@ -10,9 +10,9 @@
    (console or `journalctl -u securitywizard`, and `<data dir>/initial-credentials.txt`). Log in, then change them from **Account**.
    - Scripts or proxies that call the API must log in first (`POST /api/login`) or use `SECURITYWIZARD_TOKEN`.
    - To keep the old open behaviour (not recommended) set `SECURITYWIZARD_AUTH=0`.
-2. **Applying fixes is off in the shipped service.** The systemd unit sets `SECURITYWIZARD_DRY_RUN_ONLY=1`. Remove it
-   (`systemctl edit securitywizard`) if you want fixes to be applied. Risky SSH and firewall changes then revert after five
-   minutes unless you press **Keep this change**.
+2. **Applying fixes is off by default.** Dry-run is the default everywhere; set `SECURITYWIZARD_DRY_RUN_ONLY=0` explicitly
+   (`systemctl edit securitywizard`) if you want fixes to be applied. Rollback is refused in dry-run mode as well. Risky SSH
+   and firewall changes then revert after five minutes unless you press **Keep this change**.
 3. **Removed remediations.** The `chattr +a` actions for the auth log and syslog are gone because they break log rotation.
 4. **Reverse proxies.** Add the public host name to `SECURITYWIZARD_ALLOWED_HOSTS`; requests for any other `Host` are refused.
 5. **Python 3.10 or newer** is required. Re-run `sudo ./setup.sh install` to refresh the virtual environment; `setup.sh` now

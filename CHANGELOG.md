@@ -14,6 +14,10 @@ All notable changes to this project are documented here. The format follows
 - Read-only mode (`SECURITYWIZARD_READONLY=1`) and a hardened systemd unit.
 
 ### Fixed
+- **Dry-run is now really the default.** Without `SECURITYWIZARD_DRY_RUN_ONLY` the tool used to allow changes; now only an
+  explicit `0` does. Rollback is refused in dry-run mode too (automatic safety reverts still run).
+- The dead-man switch was never armed for the real SSH and firewall fixes (it looked for the flag in the wrong place), and the
+  anti-lockout check stored in each plan was never called; both are fixed and shown in the preview.
 - **PRV-001** SUID/SGID hunter: `find` was called with its arguments in the wrong order and always skipped. It now scans local
   filesystems only, prunes pseudo and container paths, and compares with a baseline and the package database.
 - **PRV-006** `/etc/ssh/sshd_config` mode 0644 is the distribution default and is no longer critical.

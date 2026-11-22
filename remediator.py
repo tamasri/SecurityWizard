@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import deadman
+import security
 
 logger = logging.getLogger("securitywizard")
 
@@ -50,7 +51,7 @@ def _is_root():
 
 
 def _drun():
-    return os.environ.get("SECURITYWIZARD_DRY_RUN_ONLY", "") == "1"
+    return security.is_dry_run_only()
 
 
 def _allow_nonroot():
@@ -169,6 +170,23 @@ def _check_idempotent(plan: dict) -> bool:
     return True
 
 
+def _plan_precondition(plan: dict) -> List[str]:
+    """Reasons given by the plan's own anti-lockout check; an error in the check counts as a refusal."""
+    check = plan.get("precondition")
+    if not callable(check):
+        return []
+    try:
+        result = check()
+    except Exception as exc:
+        logger.exception("precondition check failed")
+        return ["precondition check failed: %s" % exc]
+    if not result:
+        return []
+    if isinstance(result, (list, tuple)):
+        return [str(item) for item in result]
+    return [str(result)]
+
+
 def preview(remediation_id: str) -> dict:
     out: Dict[str, Any] = {
         "remediation_id": remediation_id,
@@ -218,9 +236,10 @@ def preview(remediation_id: str) -> dict:
             out["perm_changes"].append({"path": p, "current_mode": cur, "new_mode": oct(pc["mode"])[2:]})
         out["commands"] = [shlex.join(c) for c in plan.get("commands", [])]
         out["warnings"] = list(plan.get("warnings", []))
-        if plan.get("blockers"):
+        refusals = list(plan.get("blockers") or []) + _plan_precondition(plan)
+        if refusals:
             out["blocked"] = True
-            out["blocked_reason"] = "; ".join(plan["blockers"])
+            out["blocked_reason"] = "; ".join(refusals)
         out["requires_root"] = True
     except Exception as e:
         out["blocked"] = True
@@ -260,6 +279,10 @@ def apply(remediation_id: str, confirm: bool = False, runner=None, precondition=
             return out
         if plan.get("blockers"):
             out["message"] = "blocked: " + "; ".join(plan["blockers"])
+            return out
+        plan_refusals = _plan_precondition(plan)
+        if plan_refusals:
+            out["message"] = "precondition: " + "; ".join(plan_refusals)
             return out
         if precondition is not None:
             reason = precondition(plan)
@@ -310,7 +333,7 @@ def apply(remediation_id: str, confirm: bool = False, runner=None, precondition=
                 rc, so, se = run(cmd)
                 out["output"].append("validate " + shlex.join(cmd) + " rc=" + str(rc))
                 if rc != 0:
-                    rollback(out["snapshot_id"])
+                    rollback(out["snapshot_id"], force=True)
                     out["message"] = "validation failed, rolled back"
                     return out
             for cmd in plan.get("commands", []):
@@ -322,13 +345,13 @@ def apply(remediation_id: str, confirm: bool = False, runner=None, precondition=
                     out["output"].append(se)
             out["ok"] = True
             out["message"] = "applied"
-            if info.get("risky_remote"):
+            if info.get("risky_remote") or plan.get("risky_remote"):
                 token = "DM-" + remediation_id
-                minutes = info.get("deadman_minutes", 5)
+                minutes = info.get("deadman_minutes") or plan.get("deadman_minutes") or 5
                 deadline = time.time() + minutes * 60.0
 
                 def _revert():
-                    rollback(out["snapshot_id"])
+                    rollback(out["snapshot_id"], force=True)
 
                 deadman.arm(
                     token,
@@ -355,7 +378,7 @@ def recover_deadman() -> List[str]:
 
         def revert():
             if snapshot_id:
-                rollback(snapshot_id)
+                rollback(snapshot_id, force=True)
 
         return revert
 
@@ -391,9 +414,13 @@ def list_backups():
     return out
 
 
-def rollback(snapshot_id):
+def rollback(snapshot_id, force=False):
+    """Restore a backup. Refused in dry-run mode, except for the automatic safety reverts (force=True)."""
     out = {"ok": False, "message": "", "restored": []}
     try:
+        if _drun() and not force:
+            out["message"] = "dry-run only"
+            return out
         if not snapshot_id or not all(c.isalnum() or c in "_.-" for c in snapshot_id):
             out["message"] = "invalid snapshot id"
             return out

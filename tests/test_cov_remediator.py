@@ -78,7 +78,8 @@ def test_environment_switches(monkeypatch):
     monkeypatch.delenv("SECURITYWIZARD_DRY_RUN_ONLY")
     monkeypatch.delenv("SECURITYWIZARD_ALLOW_NONROOT")
     monkeypatch.delenv("SECURITYWIZARD_BACKUP_DIR")
-    assert remediator._drun() is False and remediator._allow_nonroot() is False
+    # dry-run is the default when the variable is not set
+    assert remediator._drun() is True and remediator._allow_nonroot() is False
     assert remediator._bdir() == "/var/backups/securitywizard"
 
 
