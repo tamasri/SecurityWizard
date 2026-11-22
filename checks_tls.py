@@ -57,9 +57,13 @@ def _probe_verified(host: str, port: int, timeout: float = 5.0, connect: Optiona
 def _probe_insecure(host: str, port: int, timeout: float = 5.0, connect: Optional[ConnectFn] = None):
     """A handshake that never fails on certificate problems, used only to read the negotiated cipher/version
     even when the chain itself is broken (that is reported separately by the certificate check)."""
+    # Deliberate for this diagnostic probe, not a connection that sends or trusts anything: chain/hostname
+    # validity is reported separately by check_certificate() (TLS-001). Disabling verification here is what
+    # lets the cipher check still report something useful on a host whose certificate is already broken,
+    # instead of failing with an unrelated SSL error.
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    ctx.check_hostname = False  # NOSONAR
+    ctx.verify_mode = ssl.CERT_NONE  # NOSONAR
     return (connect or _connect)(host, port, ctx, timeout)
 
 
@@ -68,9 +72,13 @@ def probe_weak_version(
 ) -> Optional[bool]:
     """True if the server completed a handshake pinned to exactly this (weak) version, False if it refused,
     None if this machine's OpenSSL build cannot even attempt the version (so nothing is proven either way)."""
+    # Deliberate: this probe exists to isolate ONE variable (does the server still accept this legacy
+    # protocol version at all), so a hostname/chain mismatch on the same certificate must not be allowed to
+    # produce a false "refused" result for a reason that has nothing to do with the protocol version.
+    # Nothing sent here is sensitive and no data from the connection is trusted.
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    ctx.check_hostname = False  # NOSONAR
+    ctx.verify_mode = ssl.CERT_NONE  # NOSONAR
     try:
         ctx.minimum_version = _VERSION_MAP[label]
         ctx.maximum_version = _VERSION_MAP[label]
